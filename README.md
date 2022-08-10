@@ -1,2 +1,1 @@
-# maqui
- The Maqui Programming Language
+# The Maqui Programming Language
