@@ -18,57 +18,57 @@ func TestLexer(t *testing.T) {
 			"func main () {}",
 			false,
 			[]Token{
-				{TokenFunc, "func"},
-				{TokenIdentifier, "main"},
-				{TokenOpenParentheses, "("},
-				{TokenCloseParentheses, ")"},
-				{TokenOpenCurly, "{"},
-				{TokenCloseCurly, "}"},
+				{TokenFunc, "func", nil},
+				{TokenIdentifier, "main", nil},
+				{TokenOpenParentheses, "(", nil},
+				{TokenCloseParentheses, ")", nil},
+				{TokenOpenCurly, "{", nil},
+				{TokenCloseCurly, "}", nil},
 			},
 		},
 		{
 			"//this is a comment\n",
 			false,
 			[]Token{
-				{TokenLineComment, "this is a comment"},
+				{TokenLineComment, "this is a comment", nil},
 			},
 		},
 		{
 			"func main () {\n// this is a comment \n}",
 			false,
 			[]Token{
-				{TokenFunc, "func"},
-				{TokenIdentifier, "main"},
-				{TokenOpenParentheses, "("},
-				{TokenCloseParentheses, ")"},
-				{TokenOpenCurly, "{"},
-				{TokenLineComment, " this is a comment "},
-				{TokenCloseCurly, "}"},
+				{TokenFunc, "func", nil},
+				{TokenIdentifier, "main", nil},
+				{TokenOpenParentheses, "(", nil},
+				{TokenCloseParentheses, ")", nil},
+				{TokenOpenCurly, "{", nil},
+				{TokenLineComment, " this is a comment ", nil},
+				{TokenCloseCurly, "}", nil},
 			},
 		},
 		{
 			"únicódeShouldBeVàlid := 1",
 			false,
 			[]Token{
-				{TokenIdentifier, "únicódeShouldBeVàlid"},
-				{TokenDeclaration, ":="},
-				{TokenNumber, "1"},
+				{TokenIdentifier, "únicódeShouldBeVàlid", nil},
+				{TokenDeclaration, ":=", nil},
+				{TokenNumber, "1", nil},
 			},
 		},
 		{
 			"identifier := \"string\"",
 			false,
 			[]Token{
-				{TokenIdentifier, "identifier"},
-				{TokenDeclaration, ":="},
-				{TokenString, "string"},
+				{TokenIdentifier, "identifier", nil},
+				{TokenDeclaration, ":=", nil},
+				{TokenString, "string", nil},
 			},
 		},
 		{
 			"\"\"",
 			false,
 			[]Token{
-				{TokenString, ""},
+				{TokenString, "", nil},
 			},
 		},
 		{
@@ -85,11 +85,15 @@ func TestLexer(t *testing.T) {
 
 	for _, c := range cases {
 		r := strings.NewReader(c.data)
-		l := NewLexer(r)
+		l := NewLexerFromReader(r)
 
 		toks, err := l.RunBlocking()
 		if c.fail {
 			assert.Error(t, err)
+		}
+
+		for i := 0; i < len(toks); i++ {
+			toks[i].Loc = nil // ignore meta
 		}
 
 		assert.Equal(t, c.expect, toks)
@@ -106,7 +110,7 @@ func benchmarkLexer(size int, b *testing.B) {
 		b.StopTimer()
 		data := test.GetRandomTokens(size)
 		r := strings.NewReader(data)
-		l := NewLexer(r)
+		l := NewLexerFromReader(r)
 
 		var err error
 		b.StartTimer()

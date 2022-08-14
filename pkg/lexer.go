@@ -5,13 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 )
 
 type TokenType uint64
-type stateFunc func(l *Lexer) stateFunc
+type lexerState func(l *Lexer) lexerState
 
 //go:generate stringer -type=TokenType -trimprefix=Token
 const (
@@ -19,6 +21,7 @@ const (
 
 	TokenError TokenType = iota
 	TokenEOF
+
 	TokenNumber
 	TokenString
 
@@ -27,6 +30,9 @@ const (
 
 	TokenPlus
 	TokenMinus
+	TokenMulti
+	TokenDiv
+
 	TokenDeclaration
 	TokenLineComment
 	TokenOpenParentheses
@@ -53,14 +59,36 @@ var operatorTable = map[string]TokenType{
 type Token struct {
 	Typ   TokenType
 	Value string
+	Loc   *Location
+}
+
+type Location struct {
+	Start uint64
+	End   uint64
+	File  string
 }
 
 type Lexer struct {
-	reader *bufio.Reader
-	done   chan Token
+	filename string
+	reader   *bufio.Reader
+	done     chan Token
+	start    uint64
+	pos      uint64
 }
 
-func NewLexer(reader io.Reader) *Lexer {
+func NewLexer(filename string) (*Lexer, error) {
+	f, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	l := NewLexerFromReader(f)
+	l.filename = filename
+
+	return l, nil
+}
+
+func NewLexerFromReader(reader io.Reader) *Lexer {
 	return &Lexer{
 		reader: bufio.NewReader(reader),
 		done:   make(chan Token),
@@ -72,7 +100,7 @@ func (l *Lexer) Chan() chan Token {
 }
 
 func (l *Lexer) Run() {
-	for state := defaultState; state != nil; {
+	for state := startState; state != nil; {
 		state = state(l)
 	}
 
@@ -99,7 +127,7 @@ func (l *Lexer) RunBlocking() ([]Token, error) {
 	}
 }
 
-func defaultState(l *Lexer) stateFunc {
+func startState(l *Lexer) lexerState {
 	for {
 		switch r := l.peek(); {
 		case r == EOF:
@@ -120,7 +148,7 @@ func defaultState(l *Lexer) stateFunc {
 	}
 }
 
-func numberState(l *Lexer) stateFunc {
+func numberState(l *Lexer) lexerState {
 	var num strings.Builder
 	for r := l.peek(); '0' <= r && r <= '9'; r = l.peek() {
 		num.WriteRune(l.next())
@@ -129,7 +157,7 @@ func numberState(l *Lexer) stateFunc {
 	return l.emmitValue(TokenNumber, num.String())
 }
 
-func stringState(l *Lexer) stateFunc {
+func stringState(l *Lexer) lexerState {
 	l.next() // Skip the leading double-quote
 
 	var str strings.Builder
@@ -144,7 +172,7 @@ func stringState(l *Lexer) stateFunc {
 	return l.emmitValue(TokenString, str.String())
 }
 
-func identifierState(l *Lexer) stateFunc {
+func identifierState(l *Lexer) lexerState {
 	var id strings.Builder
 	for r := l.peek(); unicode.IsLetter(r); r = l.peek() {
 		id.WriteRune(l.next())
@@ -157,7 +185,7 @@ func identifierState(l *Lexer) stateFunc {
 	return l.emmitValue(TokenIdentifier, id.String())
 }
 
-func operatorState(l *Lexer) stateFunc {
+func operatorState(l *Lexer) lexerState {
 	r := l.next()
 	if r == ':' || r == '/' { // Some operators can be two runes
 		op := string(r) + string(l.peek())
@@ -179,7 +207,7 @@ func operatorState(l *Lexer) stateFunc {
 	return l.errorf("invalid symbol '%c'", r)
 }
 
-func lineCommentState(l *Lexer) stateFunc {
+func lineCommentState(l *Lexer) lexerState {
 	var id strings.Builder
 	for r := l.peek(); r != '\n' && r != EOF; r = l.peek() {
 		id.WriteRune(l.next())
@@ -188,7 +216,7 @@ func lineCommentState(l *Lexer) stateFunc {
 	return l.emmitValue(TokenLineComment, id.String())
 }
 
-func (l *Lexer) errorf(format string, args ...interface{}) stateFunc {
+func (l *Lexer) errorf(format string, args ...interface{}) lexerState {
 	l.done <- Token{
 		Typ:   TokenError,
 		Value: fmt.Sprintf(format, args...),
@@ -197,26 +225,28 @@ func (l *Lexer) errorf(format string, args ...interface{}) stateFunc {
 	return nil
 }
 
-func (l *Lexer) emmitNext(t TokenType) stateFunc {
-	l.done <- Token{
-		Typ:   t,
-		Value: string(l.next()),
-	}
-
-	return defaultState
+func (l *Lexer) emmitNext(t TokenType) lexerState {
+	return l.emmitValue(t, string(l.next()))
 }
 
-func (l *Lexer) emmitValue(t TokenType, val string) stateFunc {
+func (l *Lexer) emmitValue(t TokenType, val string) lexerState {
 	l.done <- Token{
 		Typ:   t,
 		Value: val,
+		Loc:   l.location(),
 	}
 
-	return defaultState
+	l.start = l.pos
+
+	return startState
 }
 
 func (l *Lexer) peek() rune {
 	r := l.next()
+	if r != EOF && r != utf8.RuneError {
+		l.pos-- // Revert position incrementer
+	}
+
 	_ = l.reader.UnreadRune()
 
 	return r
@@ -232,5 +262,26 @@ func (l *Lexer) next() rune {
 		return utf8.RuneError
 	}
 
+	l.pos++
 	return r
+}
+
+func (l *Lexer) location() *Location {
+	return &Location{
+		File:  l.filename,
+		Start: l.start,
+		End:   l.pos,
+	}
+}
+
+func (m *Location) String() string {
+	return fmt.Sprintf("%s:[%d:%d]", path.Base(m.File), m.Start, m.End)
+}
+
+func (t Token) isValid() bool {
+	return t.Typ != TokenEOF && t.Typ != TokenError
+}
+
+func (t Token) isComment() bool {
+	return t.Typ == TokenLineComment
 }
