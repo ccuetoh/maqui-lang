@@ -3,28 +3,28 @@ package maqui
 import "fmt"
 
 type Parser struct {
-	lexer *Lexer
-	ast   *AST
-	buf   *Token
+	tokenizer Tokenizer
+	ast       *AST
+	buf       *Token
 }
 
-func NewParser(lexer *Lexer) *Parser {
+func NewParser(tokenizer Tokenizer) *Parser {
 	return &Parser{
-		lexer: lexer,
+		tokenizer: tokenizer,
 		ast: &AST{
-			Filename: lexer.filename,
+			Filename: tokenizer.GetFilename(),
 		},
 	}
 }
 
-func (p *Parser) Run() (*AST, error) {
-	go p.lexer.Run()
+func (p *Parser) Run() *AST {
+	go p.tokenizer.Run()
 
 	for p.peek().Typ != TokenEOF {
 		p.ast.Statements = append(p.ast.Statements, p.statement())
 	}
 
-	return p.ast, nil
+	return p.ast
 }
 
 func (p *Parser) peek() Token {
@@ -49,7 +49,7 @@ func (p *Parser) next() Token {
 		return *temp
 	}
 
-	tok := <-p.lexer.Chan()
+	tok := p.tokenizer.Get()
 	if !tok.isValid() {
 		// If a token is invalid (such as Error or EOF) keep it buffered since no more valid tokens are expected
 		p.buf = &tok
@@ -85,80 +85,29 @@ func (p *Parser) consume(typ TokenType) bool {
 }
 
 func (p *Parser) errorf(l *Location, format string, args ...interface{}) Expr {
-	return BadExpr{l, fmt.Sprintf(format, args...)}
-}
-
-// TODO Temporary, only for testing
-func (p *Parser) variableDecl() *VariableDecl {
-	name := p.expect(TokenIdentifier)
-	if name == nil {
-		p.errorf(nil, "expected function name")
-	}
-
-	if !p.consume(TokenDeclaration) {
-		p.errorf(name.Loc, "bad variable declaration")
-	}
-
-	return &VariableDecl{
-		Name:  name.Value,
-		Value: p.expr(),
-	}
-}
-
-// TODO Temporary, only for testing
-func (p *Parser) funcCall() *FuncCall {
-	name := p.expect(TokenIdentifier)
-	if name == nil {
-		p.errorf(nil, "expected function name")
-	}
-
-	if !p.consume(TokenOpenParentheses) {
-		p.errorf(name.Loc, "bad function call")
-	}
-
-	id := p.expect(TokenIdentifier)
-	if id == nil {
-		p.errorf(nil, "bad function call")
-	}
-
-	if !p.consume(TokenCloseParentheses) {
-		p.errorf(name.Loc, "bad function call")
-	}
-
-	return &FuncCall{
-		Name: name.Value,
-		Args: []Expr{Identifier{Name: id.Value}},
-	}
+	return &BadExpr{l, fmt.Sprintf(format, args...)}
 }
 
 func (p *Parser) statement() Expr {
 	switch tok := p.peek(); tok.Typ {
 	case TokenFunc:
 		return p.funcDecl()
-	case TokenIdentifier:
-		// TODO Move to recursive descent; only for testing
-		if tok.Value == "print" {
-			return p.funcCall()
-		}
-
-		return p.variableDecl()
-
 	default:
 		return p.expr()
 	}
 }
 
-func (p *Parser) funcDecl() *FuncDecl {
+func (p *Parser) funcDecl() Expr {
 	start := p.next().Loc // func keyword
 
 	name := p.expect(TokenIdentifier)
 	if name == nil {
-		p.errorf(start, "expected function name")
+		return p.errorf(start, "expected function name")
 	}
 
 	// TODO: Allow arguments
 	if !p.consume(TokenOpenParentheses) || !p.consume(TokenCloseParentheses) {
-		p.errorf(start, "bad function declaration")
+		return p.errorf(start, "bad function declaration")
 	}
 
 	return &FuncDecl{
@@ -169,7 +118,7 @@ func (p *Parser) funcDecl() *FuncDecl {
 
 func (p *Parser) blockStmt() []Expr {
 	if tok := p.expect(TokenOpenCurly); tok == nil {
-		return []Expr{p.errorf(tok.Loc, "invalid block statement")}
+		return []Expr{p.errorf(nil, "invalid block statement")}
 	}
 
 	var exprs []Expr
@@ -190,7 +139,60 @@ func (p *Parser) blockStmt() []Expr {
 }
 
 func (p *Parser) expr() Expr {
-	return p.additiveExpr()
+	expr := p.additiveExpr()
+
+	id, ok := expr.(*Identifier)
+	if ok {
+		tok := p.peek()
+		if tok.Typ == TokenDeclaration {
+			return p.varDeclExpr(id)
+		}
+
+		if tok.Typ == TokenOpenParentheses {
+			return p.funcCall(id)
+		}
+	}
+
+	return expr
+}
+
+func (p *Parser) varDeclExpr(id *Identifier) Expr {
+	if p.peek().Typ != TokenDeclaration {
+		return id
+	}
+
+	p.next() // Skip :=
+
+	return &VariableDecl{
+		Name:  id.Name,
+		Value: p.expr(),
+	}
+}
+
+func (p *Parser) funcCall(id *Identifier) *FuncCall {
+	if !p.consume(TokenOpenParentheses) {
+		p.errorf(nil, "bad function call")
+	}
+
+	var args []Expr
+	for tok := p.peek(); tok.isValid() && tok.Typ != TokenCloseParentheses; tok = p.peek() {
+		args = append(args, p.expr())
+
+		if !p.check(TokenComma) {
+			break
+		}
+
+		p.next() // Skip the comma
+	}
+
+	if !p.consume(TokenCloseParentheses) {
+		p.errorf(nil, "bad function call")
+	}
+
+	return &FuncCall{
+		Name: id.Name,
+		Args: args,
+	}
 }
 
 func (p *Parser) additiveExpr() Expr {
@@ -202,7 +204,7 @@ func (p *Parser) additiveExpr() Expr {
 			p.next()
 
 			rhs := p.additiveExpr()
-			lhs = BinaryExpr{
+			lhs = &BinaryExpr{
 				Operation: BinaryOp(tok.Value),
 				Op1:       lhs,
 				Op2:       rhs,
@@ -255,19 +257,39 @@ func (p *Parser) unaryExpr() Expr {
 }
 
 func (p *Parser) primary() Expr {
-	if p.check(TokenOpenParentheses) {
-		p.next()
-
-		exp := p.expr()
-
-		if tok := p.next(); tok.Typ != TokenCloseParentheses {
-			return p.errorf(tok.Loc, "expected closing parenthesis")
-		}
-
-		return exp
+	switch tok := p.peek(); tok.Typ {
+	case TokenOpenParentheses:
+		return p.parenthesisedExpression()
+	case TokenIdentifier:
+		return p.identifier()
 	}
 
 	return p.literal()
+}
+
+func (p *Parser) parenthesisedExpression() Expr {
+	if tok := p.next(); tok.Typ != TokenOpenParentheses {
+		return p.errorf(tok.Loc, "expected opening parenthesis")
+	}
+
+	exp := p.expr()
+
+	if tok := p.next(); tok.Typ != TokenCloseParentheses {
+		return p.errorf(tok.Loc, "expected closing parenthesis")
+	}
+
+	return exp
+}
+
+func (p *Parser) identifier() Expr {
+	tok := p.next()
+	if tok.Typ != TokenIdentifier {
+		return p.errorf(tok.Loc, "expected an varDeclExpr")
+	}
+
+	return &Identifier{
+		Name: tok.Value,
+	}
 }
 
 func (p *Parser) literal() Expr {
@@ -283,6 +305,7 @@ func (p *Parser) literal() Expr {
 			Value: p.next().Value,
 		}
 	default:
-		return p.errorf(tok.Loc, "invalid literal")
+		p.next() // Skip errored token
+		return p.errorf(tok.Loc, "invalid symbol '%s'", tok.Value)
 	}
 }

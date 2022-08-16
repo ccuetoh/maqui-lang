@@ -29,11 +29,10 @@ func (c *Compiler) CompileFromReader(reader io.Reader) error {
 }
 
 func (c *Compiler) compile(p *Parser) error {
-	ast, err := p.Run()
-	if err != nil {
-		return err
-	}
+	ast := p.Run()
 
+	// TODO
 	fmt.Println(ast)
 	return nil
+
 }

@@ -39,6 +39,8 @@ const (
 	TokenCloseParentheses
 	TokenOpenCurly
 	TokenCloseCurly
+
+	TokenComma
 )
 
 var keywordTable = map[string]TokenType{
@@ -54,6 +56,7 @@ var operatorTable = map[string]TokenType{
 	")":  TokenCloseParentheses,
 	"{":  TokenOpenCurly,
 	"}":  TokenCloseCurly,
+	",":  TokenComma,
 }
 
 type Token struct {
@@ -66,6 +69,12 @@ type Location struct {
 	Start uint64
 	End   uint64
 	File  string
+}
+
+type Tokenizer interface {
+	Run()
+	Get() Token
+	GetFilename() string
 }
 
 type Lexer struct {
@@ -97,6 +106,16 @@ func NewLexerFromReader(reader io.Reader) *Lexer {
 
 func (l *Lexer) Chan() chan Token {
 	return l.done
+}
+
+func (l *Lexer) Get() Token {
+	// Comply with the Tokenizer interface
+	return <-l.Chan()
+}
+
+func (l *Lexer) GetFilename() string {
+	// Comply with the Tokenizer interface
+	return l.filename
 }
 
 func (l *Lexer) Run() {

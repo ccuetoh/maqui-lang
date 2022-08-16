@@ -1,9 +1,10 @@
 package maqui
 
 import (
-	"go.maqui.dev/internal/test"
 	"strings"
 	"testing"
+
+	"go.maqui.dev/internal/test"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -56,10 +57,10 @@ func TestLexer(t *testing.T) {
 			},
 		},
 		{
-			"identifier := \"string\"",
+			"varDeclExpr := \"string\"",
 			false,
 			[]Token{
-				{TokenIdentifier, "identifier", nil},
+				{TokenIdentifier, "varDeclExpr", nil},
 				{TokenDeclaration, ":=", nil},
 				{TokenString, "string", nil},
 			},
