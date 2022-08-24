@@ -1,7 +1,6 @@
 package maqui
 
 import (
-	"fmt"
 	"io"
 )
 
@@ -11,28 +10,26 @@ func NewCompiler() *Compiler {
 	return &Compiler{}
 }
 
-func (c *Compiler) Compile(filename string) error {
+func (c *Compiler) Compile(filename string) (error, []CompileError) {
 	lexer, err := NewLexer(filename)
 	if err != nil {
-		return err
+		return err, nil
 	}
 
 	parser := NewParser(lexer)
-	return c.compile(parser)
+	analyzer := NewContextAnalyser(parser)
+	return nil, c.compile(analyzer)
 }
 
-func (c *Compiler) CompileFromReader(reader io.Reader) error {
+func (c *Compiler) CompileFromReader(reader io.Reader) []CompileError {
 	lexer := NewLexerFromReader(reader)
 	parser := NewParser(lexer)
+	analyzer := NewContextAnalyser(parser)
 
-	return c.compile(parser)
+	return c.compile(analyzer)
 }
 
-func (c *Compiler) compile(p *Parser) error {
-	ast := p.Run()
-
-	// TODO
-	fmt.Println(ast)
-	return nil
-
+func (c *Compiler) compile(ca *ContextAnalyzer) []CompileError {
+	ast := ca.Do()
+	return ast.Errors
 }
