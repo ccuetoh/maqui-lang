@@ -2,29 +2,132 @@ package maqui
 
 import "fmt"
 
+type AST struct {
+	Statements []Expr
+	Errors     []CompileError
+}
+
+type Expr interface{}
+
+type BadExpr struct {
+	Location *Location
+	Error    string
+}
+
+type FuncDecl struct {
+	Name string
+	Body []Expr
+}
+
+type VariableDecl struct {
+	Name         string
+	Value        Expr
+	ResolvedType TypeInfo
+}
+
+type FuncCall struct {
+	Name          string
+	Args          []Expr
+	ResolvedTypes []TypeInfo
+}
+
+type Identifier struct {
+	Name string
+}
+
+type EOS struct{}
+
+type BinaryOp string
+
+const (
+	BinaryAddition       BinaryOp = "+"
+	BinarySubtraction    BinaryOp = "-"
+	BinaryMultiplication BinaryOp = "*"
+	BinaryDivision       BinaryOp = "/"
+)
+
+type BinaryExpr struct {
+	Operation BinaryOp
+	Op1       Expr
+	Op2       Expr
+}
+
+type UnaryOp string
+
+const (
+	UnaryNegative UnaryOp = "-"
+)
+
+type UnaryExpr struct {
+	Operation UnaryOp
+	Operand   Expr
+}
+
+type LiteralType int
+
+const (
+	LiteralNumber LiteralType = iota
+	LiteralString
+)
+
+type LiteralExpr struct {
+	Typ   LiteralType
+	Value string
+}
+
+type SyntacticAnalyzer interface {
+	Do()
+	Get() Expr
+	GetFilename() string
+}
+
 type Parser struct {
+	filename  string
 	tokenizer Tokenizer
-	ast       *AST
+	output    chan Expr
 	buf       *Token
 }
 
 func NewParser(tokenizer Tokenizer) *Parser {
 	return &Parser{
 		tokenizer: tokenizer,
-		ast: &AST{
-			Filename: tokenizer.GetFilename(),
-		},
+		filename:  tokenizer.GetFilename(),
+		output:    make(chan Expr, 2),
 	}
+}
+func (p *Parser) Get() Expr {
+	return <-p.Chan()
+}
+
+func (p *Parser) Chan() chan Expr {
+	return p.output
+}
+
+func (p *Parser) GetFilename() string {
+	return p.filename
+}
+
+func (p *Parser) Do() {
+	go p.tokenizer.Do()
+
+	for p.peek().Typ != TokenEOF {
+		p.output <- p.statement()
+	}
+
+	p.output <- &EOS{}
+	close(p.output)
 }
 
 func (p *Parser) Run() *AST {
-	go p.tokenizer.Run()
+	go p.tokenizer.Do()
+
+	ast := &AST{}
 
 	for p.peek().Typ != TokenEOF {
-		p.ast.Statements = append(p.ast.Statements, p.statement())
+		ast.Statements = append(ast.Statements, p.statement())
 	}
 
-	return p.ast
+	return ast
 }
 
 func (p *Parser) peek() Token {

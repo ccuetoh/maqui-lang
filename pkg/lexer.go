@@ -72,7 +72,7 @@ type Location struct {
 }
 
 type Tokenizer interface {
-	Run()
+	Do()
 	Get() Token
 	GetFilename() string
 }
@@ -80,7 +80,7 @@ type Tokenizer interface {
 type Lexer struct {
 	filename string
 	reader   *bufio.Reader
-	done     chan Token
+	output   chan Token
 	start    uint64
 	pos      uint64
 }
@@ -100,12 +100,12 @@ func NewLexer(filename string) (*Lexer, error) {
 func NewLexerFromReader(reader io.Reader) *Lexer {
 	return &Lexer{
 		reader: bufio.NewReader(reader),
-		done:   make(chan Token),
+		output: make(chan Token, 2),
 	}
 }
 
 func (l *Lexer) Chan() chan Token {
-	return l.done
+	return l.output
 }
 
 func (l *Lexer) Get() Token {
@@ -118,16 +118,16 @@ func (l *Lexer) GetFilename() string {
 	return l.filename
 }
 
-func (l *Lexer) Run() {
+func (l *Lexer) Do() {
 	for state := startState; state != nil; {
 		state = state(l)
 	}
 
-	close(l.done)
+	close(l.output)
 }
 
-func (l *Lexer) RunBlocking() ([]Token, error) {
-	go l.Run()
+func (l *Lexer) Run() ([]Token, error) {
+	go l.Do()
 
 	var tokens []Token
 	for {
@@ -236,7 +236,7 @@ func lineCommentState(l *Lexer) lexerState {
 }
 
 func (l *Lexer) errorf(format string, args ...interface{}) lexerState {
-	l.done <- Token{
+	l.output <- Token{
 		Typ:   TokenError,
 		Value: fmt.Sprintf(format, args...),
 	}
@@ -249,7 +249,7 @@ func (l *Lexer) emmitNext(t TokenType) lexerState {
 }
 
 func (l *Lexer) emmitValue(t TokenType, val string) lexerState {
-	l.done <- Token{
+	l.output <- Token{
 		Typ:   t,
 		Value: val,
 		Loc:   l.location(),

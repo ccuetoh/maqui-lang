@@ -18,7 +18,7 @@ func NewBufferedTokenizerMocker(toks []Token) *BufferedTokenizerMocker {
 	}
 }
 
-func (b *BufferedTokenizerMocker) Run() {
+func (b *BufferedTokenizerMocker) Do() {
 	return
 }
 
@@ -269,7 +269,6 @@ func TestParser(t *testing.T) {
 
 		got := p.Run()
 		expect := &AST{
-			Filename:   tokenizer.GetFilename(),
 			Statements: c.expect,
 		}
 

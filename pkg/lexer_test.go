@@ -88,7 +88,7 @@ func TestLexer(t *testing.T) {
 		r := strings.NewReader(c.data)
 		l := NewLexerFromReader(r)
 
-		toks, err := l.RunBlocking()
+		toks, err := l.Run()
 		if c.fail {
 			assert.Error(t, err)
 		}
@@ -116,7 +116,7 @@ func benchmarkLexer(size int, b *testing.B) {
 		var err error
 		b.StartTimer()
 
-		benchResult, err = l.RunBlocking()
+		benchResult, err = l.Run()
 		if err != nil {
 			b.Fatal(err)
 		}
