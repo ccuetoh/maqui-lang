@@ -72,7 +72,10 @@ func (c *ContextAnalyzer) analyze(stab SymbolTable, expr Expr) SymbolTable {
 
 		return stab
 	case *VariableDecl:
-		stab.add(e.Name, c.resolve(&stab, e.Value))
+		t := c.resolve(&stab, e.Value)
+
+		stab.add(e.Name, t)
+		e.ResolvedType = t
 	case *FuncCall:
 		if stab.get(e.Name) == nil {
 			stab.addError(&UndefinedError{
@@ -118,6 +121,7 @@ func (c *ContextAnalyzer) resolve(stab *SymbolTable, expr Expr) TypeInfo {
 			Name: e.Name,
 			Loc:  nil, // TODO
 		})
+
 		return nil
 	case *BinaryExpr:
 		t1 := c.resolve(stab, e.Op1)
@@ -128,7 +132,7 @@ func (c *ContextAnalyzer) resolve(stab *SymbolTable, expr Expr) TypeInfo {
 			break
 		}
 
-		if t1 != t2 {
+		if !t1.Equals(t2) {
 			stab.addError(&IncompatibleTypesError{
 				Type1: t1,
 				Type2: t2,
@@ -195,14 +199,23 @@ func (c *ContextAnalyzer) isOpDefined(t TypeInfo, op BinaryOp) bool {
 
 type TypeInfo interface {
 	String() string
+	Equals(t2 TypeInfo) bool
 }
 
 type BasicType struct {
 	Typ string
 }
 
-func (t BasicType) String() string {
+func (t *BasicType) String() string {
 	return t.Typ
+}
+
+func (t *BasicType) Equals(t2 TypeInfo) bool {
+	if typ, ok := t2.(*BasicType); ok {
+		return t.Typ == typ.Typ
+	}
+
+	return false
 }
 
 type ArgumentType struct {
@@ -210,16 +223,24 @@ type ArgumentType struct {
 	Type *BasicType
 }
 
-func (t ArgumentType) String() string {
+func (t *ArgumentType) String() string {
 	return t.Type.String()
 }
 
-type FuncType struct {
-	Args    []ArgumentType
-	Returns []BasicType
+func (t *ArgumentType) Equals(t2 TypeInfo) bool {
+	if typ, ok := t2.(*ArgumentType); ok {
+		return t.Name == typ.Name && t.Type.Equals(typ.Type)
+	}
+
+	return false
 }
 
-func (t FuncType) String() string {
+type FuncType struct {
+	Args    []*ArgumentType
+	Returns []*BasicType
+}
+
+func (t *FuncType) String() string {
 	var str strings.Builder
 	str.WriteString("func(")
 
@@ -241,6 +262,32 @@ func (t FuncType) String() string {
 	}
 
 	return str.String()
+}
+
+func (t *FuncType) Equals(t2 TypeInfo) bool {
+	if typ, ok := t2.(*FuncType); ok {
+		for i, arg := range t.Args {
+			if i >= len(typ.Args) {
+				return false
+			}
+
+			if !arg.Equals(typ.Args[i]) {
+				return false
+			}
+		}
+
+		for i, ret := range t.Returns {
+			if i >= len(typ.Returns) {
+				return false
+			}
+
+			if !ret.Equals(typ.Returns[i]) {
+				return false
+			}
+		}
+	}
+
+	return true
 }
 
 type CompileError interface{}

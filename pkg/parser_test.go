@@ -6,23 +6,23 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-type BufferedTokenizerMocker struct {
+type LexerMocker struct {
 	buf []Token
 	pos int
 }
 
-func NewBufferedTokenizerMocker(toks []Token) *BufferedTokenizerMocker {
-	return &BufferedTokenizerMocker{
+func NewLexerMocker(toks []Token) *LexerMocker {
+	return &LexerMocker{
 		buf: toks,
 		pos: 0,
 	}
 }
 
-func (b *BufferedTokenizerMocker) Do() {
+func (b *LexerMocker) Do() {
 	return
 }
 
-func (b *BufferedTokenizerMocker) Get() Token {
+func (b *LexerMocker) Get() Token {
 	if len(b.buf) <= b.pos {
 		return Token{Typ: TokenEOF}
 	}
@@ -33,7 +33,7 @@ func (b *BufferedTokenizerMocker) Get() Token {
 	return tok
 }
 
-func (b *BufferedTokenizerMocker) GetFilename() string {
+func (b *LexerMocker) GetFilename() string {
 	return "testing"
 }
 
@@ -264,7 +264,7 @@ func TestParser(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		tokenizer := NewBufferedTokenizerMocker(c.data)
+		tokenizer := NewLexerMocker(c.data)
 		p := NewParser(tokenizer)
 
 		got := p.Run()
