@@ -285,9 +285,11 @@ func (t *FuncType) Equals(t2 TypeInfo) bool {
 				return false
 			}
 		}
+
+		return true
 	}
 
-	return true
+	return false
 }
 
 type CompileError interface{}
