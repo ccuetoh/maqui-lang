@@ -261,6 +261,19 @@ func TestParser(t *testing.T) {
 				},
 			},
 		},
+		{
+			[]Token{
+				{TokenMinus, "-", nil},
+				{TokenNumber, "2", nil},
+			},
+			false,
+			[]Expr{
+				&UnaryExpr{
+					Operation: UnaryNegative,
+					Operand:   &LiteralExpr{LiteralNumber, "2"},
+				},
+			},
+		},
 	}
 
 	for _, c := range cases {
