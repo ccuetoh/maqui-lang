@@ -21,8 +21,7 @@ func NewContextAnalyser(parser SyntacticAnalyzer) *ContextAnalyzer {
 func (c *ContextAnalyzer) Do() *AST {
 	go c.parser.Do()
 
-	ast := &AST{}
-	global := NewSymbolTable()
+	ast := &AST{Global: NewGlobalSymbolTable()}
 	for {
 		expr := c.parser.Get()
 		_, ok := expr.(*EOS)
@@ -31,17 +30,21 @@ func (c *ContextAnalyzer) Do() *AST {
 			break
 		}
 
-		stab := c.analyze(global, expr)
+		stab := c.analyze(*ast.Global.Copy(), expr)
 		if e, isVarDef := expr.(*VariableDecl); isVarDef {
-			global.add(e.Name, stab.get(e.Name))
+			ast.Global.Add(e.Name, stab.Get(e.Name))
 		}
 
 		if e, isFuncDef := expr.(*FuncDecl); isFuncDef {
-			global.add(e.Name, stab.get(e.Name))
+			ast.Global.Add(e.Name, stab.Get(e.Name))
 		}
 
-		ast.Statements = append(ast.Statements, expr)
-		for _, err := range stab.errors {
+		ast.Statements = append(ast.Statements, AnnotatedExpr{
+			Stab: &stab,
+			Expr: expr,
+		})
+
+		for _, err := range stab.Errors {
 			isDuplicate := false
 			for _, err2 := range ast.Errors {
 				if err == err2 {
@@ -62,23 +65,27 @@ func (c *ContextAnalyzer) Do() *AST {
 func (c *ContextAnalyzer) analyze(stab SymbolTable, expr Expr) SymbolTable {
 	switch e := expr.(type) {
 	case *BadExpr:
-		stab.addError(&BadExprError{e})
+		stab.AddError(&BadExprError{e})
 		return stab
 	case *FuncDecl:
 		c.addFunction(&stab, e)
 		for _, child := range e.Body {
-			stab.merge(c.analyze(stab, child))
+			stab.Merge(c.analyze(stab, child))
 		}
 
 		return stab
 	case *VariableDecl:
 		t := c.resolve(&stab, e.Value)
+		if t == nil {
+			// Error already logged by the type resolution
+			break
+		}
 
-		stab.add(e.Name, t)
+		stab.Add(e.Name, t)
 		e.ResolvedType = t
 	case *FuncCall:
-		if stab.get(e.Name) == nil {
-			stab.addError(&UndefinedError{
+		if stab.Get(e.Name) == nil {
+			stab.AddError(&UndefinedError{
 				Name: e.Name,
 				Loc:  nil, // TODO
 			})
@@ -91,8 +98,8 @@ func (c *ContextAnalyzer) analyze(stab SymbolTable, expr Expr) SymbolTable {
 			// TODO See if arguments match
 		}
 	case *Identifier:
-		if stab.get(e.Name) == nil {
-			stab.addError(&UndefinedError{
+		if stab.Get(e.Name) == nil {
+			stab.AddError(&UndefinedError{
 				Name: e.Name,
 				Loc:  nil, // TODO
 			})
@@ -110,54 +117,58 @@ func (c *ContextAnalyzer) analyze(stab SymbolTable, expr Expr) SymbolTable {
 func (c *ContextAnalyzer) resolve(stab *SymbolTable, expr Expr) TypeInfo {
 	switch e := expr.(type) {
 	case *BadExpr:
-		stab.addError(&BadExprError{e})
-		return nil
+		stab.AddError(&BadExprError{e})
+		return &ErrorType{}
 	case *Identifier:
-		if t := stab.get(e.Name); t != nil {
+		if t := stab.Get(e.Name); t != nil {
 			return t
 		}
 
-		stab.addError(&UndefinedError{
+		stab.AddError(&UndefinedError{
 			Name: e.Name,
 			Loc:  nil, // TODO
 		})
 
-		return nil
+		return &ErrorType{}
 	case *BinaryExpr:
 		t1 := c.resolve(stab, e.Op1)
 		t2 := c.resolve(stab, e.Op2)
 
-		if t1 == nil || t2 == nil {
+		if t1 == nil || t2 == nil || c.isErrorType(t1) || c.isErrorType(t2) {
 			// Error already logged by the type resolution
-			break
+			return &ErrorType{}
 		}
 
 		if !t1.Equals(t2) {
-			stab.addError(&IncompatibleTypesError{
+			stab.AddError(&IncompatibleTypesError{
 				Type1: t1,
 				Type2: t2,
 				Loc:   nil, // TODO
 			})
 
-			break
+			return &ErrorType{}
 		}
 
 		if !c.isOpDefined(t1, e.Operation) {
-			stab.addError(&UndefinedOperationError{
+			stab.AddError(&UndefinedOperationError{
 				Type: t1,
 				Op:   e.Operation,
 				Loc:  nil, // TODO
 			})
+
+			return &ErrorType{}
 		}
 
 		return t1
 	case *UnaryExpr:
 		if t, isBasicType := c.resolve(stab, e.Operand).(*BasicType); isBasicType && t.Typ != "int" {
-			stab.addError(&UndefinedUnitaryError{
+			stab.AddError(&UndefinedUnitaryError{
 				Type: t,
 				Op:   e.Operation,
 				Loc:  nil, // TODO
 			})
+
+			return &ErrorType{}
 		} else {
 			return t
 		}
@@ -169,18 +180,18 @@ func (c *ContextAnalyzer) resolve(stab *SymbolTable, expr Expr) TypeInfo {
 		case LiteralNumber:
 			return &BasicType{"int"}
 		default:
-			return nil
+			return nil // TODO Log error
 		}
 	}
 
-	return nil
+	return &ErrorType{}
 }
 
 func (c *ContextAnalyzer) addFunction(stab *SymbolTable, e *FuncDecl) {
 	entry := &FuncType{}
 	// TODO Add arguments and returns
 
-	stab.add(e.Name, entry)
+	stab.Add(e.Name, entry)
 }
 
 func (c *ContextAnalyzer) isOpDefined(t TypeInfo, op BinaryOp) bool {
@@ -197,9 +208,26 @@ func (c *ContextAnalyzer) isOpDefined(t TypeInfo, op BinaryOp) bool {
 	return true
 }
 
+func (c *ContextAnalyzer) isErrorType(t TypeInfo) bool {
+	if _, isErr := t.(*ErrorType); isErr {
+		return true
+	}
+
+	return false
+}
+
 type TypeInfo interface {
 	String() string
 	Equals(t2 TypeInfo) bool
+}
+type ErrorType struct{}
+
+func (t *ErrorType) String() string {
+	return "~error"
+}
+
+func (t *ErrorType) Equals(_ TypeInfo) bool {
+	return false
 }
 
 type BasicType struct {
@@ -322,22 +350,28 @@ type UndefinedUnitaryError struct {
 }
 
 type SymbolTable struct {
-	entries map[string]TypeInfo
-	errors  []CompileError
+	Entries map[string]TypeInfo
+	Errors  []CompileError
 }
 
-func NewSymbolTable() SymbolTable {
-	return SymbolTable{
-		entries: make(map[string]TypeInfo),
+func NewGlobalSymbolTable() *SymbolTable {
+	return &SymbolTable{
+		Entries: make(map[string]TypeInfo),
 	}
 }
 
-func (t *SymbolTable) add(name string, typ TypeInfo) {
-	t.entries[name] = typ
+func NewSymbolTable() *SymbolTable {
+	return &SymbolTable{
+		Entries: make(map[string]TypeInfo),
+	}
 }
 
-func (t *SymbolTable) get(name string) TypeInfo {
-	typ, contains := t.entries[name]
+func (t *SymbolTable) Add(name string, typ TypeInfo) {
+	t.Entries[name] = typ
+}
+
+func (t *SymbolTable) Get(name string) TypeInfo {
+	typ, contains := t.Entries[name]
 	if !contains {
 		return nil
 	}
@@ -345,16 +379,27 @@ func (t *SymbolTable) get(name string) TypeInfo {
 	return typ
 }
 
-func (t *SymbolTable) merge(t2 SymbolTable) {
-	for key, typ2 := range t2.entries {
-		t.entries[key] = typ2
+func (t *SymbolTable) Merge(t2 SymbolTable) {
+	for key, typ2 := range t2.Entries {
+		t.Entries[key] = typ2
 	}
 
-	for _, err := range t2.errors {
-		t.errors = append(t.errors, err)
+	for _, err := range t2.Errors {
+		t.Errors = append(t.Errors, err)
 	}
 }
 
-func (t *SymbolTable) addError(err CompileError) {
-	t.errors = append(t.errors, err)
+func (t *SymbolTable) Copy() *SymbolTable {
+	t2 := NewSymbolTable()
+	copy(t.Errors, t2.Errors)
+
+	for k, v := range t.Entries {
+		t2.Entries[k] = v
+	}
+
+	return t2
+}
+
+func (t *SymbolTable) AddError(err CompileError) {
+	t.Errors = append(t.Errors, err)
 }

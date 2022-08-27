@@ -268,14 +268,16 @@ func TestParser(t *testing.T) {
 		p := NewParser(tokenizer)
 
 		got := p.Run()
-		expect := &AST{
-			Statements: c.expect,
+		expect := &AST{}
+
+		for _, e := range c.expect {
+			expect.Statements = append(expect.Statements, AnnotatedExpr{Expr: e})
 		}
 
 		if c.fail {
 			failed := false
-			for _, node := range got.Statements {
-				if _, ok := node.(*BadExpr); ok {
+			for _, expr := range got.Statements {
+				if _, ok := expr.Expr.(*BadExpr); ok {
 					failed = true
 					break
 				}

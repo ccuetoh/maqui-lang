@@ -65,31 +65,43 @@ func TestContextAnalyzer(t *testing.T) {
 				},
 			},
 			&AST{
-				Statements: []Expr{
-					&FuncDecl{
-						Name: "main",
-						Body: []Expr{
-							&VariableDecl{
-								Name: "x",
-								Value: &BinaryExpr{
-									Operation: BinaryAddition,
-									Op1: &LiteralExpr{
-										Typ:   LiteralNumber,
-										Value: "1",
+				Statements: []AnnotatedExpr{
+					{
+						Expr: &FuncDecl{
+							Name: "main",
+							Body: []Expr{
+								&VariableDecl{
+									Name: "x",
+									Value: &BinaryExpr{
+										Operation: BinaryAddition,
+										Op1: &LiteralExpr{
+											Typ:   LiteralNumber,
+											Value: "1",
+										},
+										Op2: &LiteralExpr{
+											Typ:   LiteralNumber,
+											Value: "1",
+										},
 									},
-									Op2: &LiteralExpr{
-										Typ:   LiteralNumber,
-										Value: "1",
+									ResolvedType: &BasicType{
+										Typ: "int",
 									},
 								},
-								ResolvedType: &BasicType{
-									Typ: "int",
-								},
+							},
+						},
+						Stab: &SymbolTable{
+							Entries: map[string]TypeInfo{
+								"x":    &BasicType{"int"},
+								"main": &FuncType{nil, nil},
 							},
 						},
 					},
 				},
-				Errors: nil,
+				Global: &SymbolTable{
+					Entries: map[string]TypeInfo{
+						"main": &FuncType{nil, nil},
+					},
+				},
 			},
 		},
 		{
@@ -110,18 +122,32 @@ func TestContextAnalyzer(t *testing.T) {
 				},
 			},
 			&AST{
-				Statements: []Expr{
-					&VariableDecl{
-						Name: "x",
-						Value: &BinaryExpr{
-							Operation: BinaryAddition,
-							Op1: &LiteralExpr{
-								Typ:   LiteralNumber,
-								Value: "1",
+				Statements: []AnnotatedExpr{
+					{
+						Expr: &VariableDecl{
+							Name: "x",
+							Value: &BinaryExpr{
+								Operation: BinaryAddition,
+								Op1: &LiteralExpr{
+									Typ:   LiteralNumber,
+									Value: "1",
+								},
+								Op2: &LiteralExpr{
+									Typ:   LiteralString,
+									Value: "text",
+								},
 							},
-							Op2: &LiteralExpr{
-								Typ:   LiteralString,
-								Value: "text",
+							ResolvedType: &ErrorType{},
+						},
+						Stab: &SymbolTable{
+							Entries: map[string]TypeInfo{
+								"x": &ErrorType{},
+							},
+							Errors: []CompileError{
+								&IncompatibleTypesError{
+									Type1: &BasicType{Typ: "int"},
+									Type2: &BasicType{Typ: "string"},
+								},
 							},
 						},
 					},
@@ -130,6 +156,11 @@ func TestContextAnalyzer(t *testing.T) {
 					&IncompatibleTypesError{
 						Type1: &BasicType{Typ: "int"},
 						Type2: &BasicType{Typ: "string"},
+					},
+				},
+				Global: &SymbolTable{
+					Entries: map[string]TypeInfo{
+						"x": &ErrorType{},
 					},
 				},
 			},
@@ -146,17 +177,36 @@ func TestContextAnalyzer(t *testing.T) {
 				},
 			},
 			&AST{
-				Statements: []Expr{
-					&FuncDecl{
-						Name: "foo",
-						Body: []Expr{},
+				Statements: []AnnotatedExpr{
+					{
+						Expr: &FuncDecl{
+							Name: "foo",
+							Body: []Expr{},
+						},
+						Stab: &SymbolTable{
+							Entries: map[string]TypeInfo{
+								"foo": &FuncType{nil, nil},
+							},
+						},
 					},
-					&FuncCall{
-						Name: "foo",
-						Args: []Expr{},
+					{
+						Expr: &FuncCall{
+							Name: "foo",
+							Args: []Expr{},
+						},
+						Stab: &SymbolTable{
+							Entries: map[string]TypeInfo{
+								"foo": &FuncType{nil, nil},
+							},
+						},
 					},
 				},
 				Errors: nil,
+				Global: &SymbolTable{
+					Entries: map[string]TypeInfo{
+						"foo": &FuncType{nil, nil},
+					},
+				},
 			},
 		},
 		{
@@ -167,10 +217,20 @@ func TestContextAnalyzer(t *testing.T) {
 				},
 			},
 			&AST{
-				Statements: []Expr{
-					&FuncCall{
-						Name: "foo",
-						Args: []Expr{},
+				Statements: []AnnotatedExpr{
+					{
+						Expr: &FuncCall{
+							Name: "foo",
+							Args: []Expr{},
+						},
+						Stab: &SymbolTable{
+							Entries: map[string]TypeInfo{},
+							Errors: []CompileError{
+								&UndefinedError{
+									Name: "foo",
+								},
+							},
+						},
 					},
 				},
 				Errors: []CompileError{
@@ -178,6 +238,7 @@ func TestContextAnalyzer(t *testing.T) {
 						Name: "foo",
 					},
 				},
+				Global: NewGlobalSymbolTable(),
 			},
 		},
 		{
@@ -187,9 +248,19 @@ func TestContextAnalyzer(t *testing.T) {
 				},
 			},
 			&AST{
-				Statements: []Expr{
-					&Identifier{
-						Name: "x",
+				Statements: []AnnotatedExpr{
+					{
+						Expr: &Identifier{
+							Name: "x",
+						},
+						Stab: &SymbolTable{
+							Entries: map[string]TypeInfo{},
+							Errors: []CompileError{
+								&UndefinedError{
+									Name: "x",
+								},
+							},
+						},
 					},
 				},
 				Errors: []CompileError{
@@ -197,6 +268,7 @@ func TestContextAnalyzer(t *testing.T) {
 						Name: "x",
 					},
 				},
+				Global: NewGlobalSymbolTable(),
 			},
 		},
 		{
@@ -210,16 +282,20 @@ func TestContextAnalyzer(t *testing.T) {
 				},
 			},
 			&AST{
-				Statements: []Expr{
-					&UnaryExpr{
-						Operation: UnaryNegative,
-						Operand: &LiteralExpr{
-							Typ:   LiteralNumber,
-							Value: "1",
+				Statements: []AnnotatedExpr{
+					{
+						Expr: &UnaryExpr{
+							Operation: UnaryNegative,
+							Operand: &LiteralExpr{
+								Typ:   LiteralNumber,
+								Value: "1",
+							},
 						},
+						Stab: NewSymbolTable(),
 					},
 				},
 				Errors: nil,
+				Global: NewGlobalSymbolTable(),
 			},
 		},
 		{
@@ -233,12 +309,23 @@ func TestContextAnalyzer(t *testing.T) {
 				},
 			},
 			&AST{
-				Statements: []Expr{
-					&UnaryExpr{
-						Operation: UnaryNegative,
-						Operand: &LiteralExpr{
-							Typ:   LiteralString,
-							Value: "foo",
+				Statements: []AnnotatedExpr{
+					{
+						Expr: &UnaryExpr{
+							Operation: UnaryNegative,
+							Operand: &LiteralExpr{
+								Typ:   LiteralString,
+								Value: "foo",
+							},
+						},
+						Stab: &SymbolTable{
+							Entries: map[string]TypeInfo{},
+							Errors: []CompileError{
+								&UndefinedUnitaryError{
+									Type: &BasicType{"string"},
+									Op:   UnaryNegative,
+								},
+							},
 						},
 					},
 				},
@@ -248,6 +335,7 @@ func TestContextAnalyzer(t *testing.T) {
 						Op:   UnaryNegative,
 					},
 				},
+				Global: NewSymbolTable(),
 			},
 		},
 		{
@@ -265,16 +353,27 @@ func TestContextAnalyzer(t *testing.T) {
 				},
 			},
 			&AST{
-				Statements: []Expr{
-					&BinaryExpr{
-						Operation: BinarySubtraction,
-						Op1: &LiteralExpr{
-							Typ:   LiteralString,
-							Value: "foo",
+				Statements: []AnnotatedExpr{
+					{
+						Expr: &BinaryExpr{
+							Operation: BinarySubtraction,
+							Op1: &LiteralExpr{
+								Typ:   LiteralString,
+								Value: "foo",
+							},
+							Op2: &LiteralExpr{
+								Typ:   LiteralString,
+								Value: "bar",
+							},
 						},
-						Op2: &LiteralExpr{
-							Typ:   LiteralString,
-							Value: "bar",
+						Stab: &SymbolTable{
+							Entries: map[string]TypeInfo{},
+							Errors: []CompileError{
+								&UndefinedOperationError{
+									Type: &BasicType{"string"},
+									Op:   BinarySubtraction,
+								},
+							},
 						},
 					},
 				},
@@ -284,6 +383,7 @@ func TestContextAnalyzer(t *testing.T) {
 						Op:   BinarySubtraction,
 					},
 				},
+				Global: NewGlobalSymbolTable(),
 			},
 		},
 		{
@@ -317,38 +417,59 @@ func TestContextAnalyzer(t *testing.T) {
 				},
 			},
 			&AST{
-				Statements: []Expr{
-					&VariableDecl{
-						Name: "x",
-						Value: &BinaryExpr{
-							Operation: BinaryAddition,
-							Op1: &LiteralExpr{
-								Typ:   LiteralNumber,
-								Value: "1",
+				Statements: []AnnotatedExpr{
+					{
+						Expr: &VariableDecl{
+							Name: "x",
+							Value: &BinaryExpr{
+								Operation: BinaryAddition,
+								Op1: &LiteralExpr{
+									Typ:   LiteralNumber,
+									Value: "1",
+								},
+								Op2: &LiteralExpr{
+									Typ:   LiteralNumber,
+									Value: "1",
+								},
 							},
-							Op2: &LiteralExpr{
-								Typ:   LiteralNumber,
-								Value: "1",
+							ResolvedType: &BasicType{"int"},
+						},
+						Stab: &SymbolTable{
+							Entries: map[string]TypeInfo{
+								"x": &BasicType{"int"},
 							},
 						},
-						ResolvedType: &BasicType{"int"},
 					},
-					&VariableDecl{
-						Name: "y",
-						Value: &BinaryExpr{
-							Operation: BinaryAddition,
-							Op1: &LiteralExpr{
-								Typ:   LiteralNumber,
-								Value: "1",
+					{
+						Expr: &VariableDecl{
+							Name: "y",
+							Value: &BinaryExpr{
+								Operation: BinaryAddition,
+								Op1: &LiteralExpr{
+									Typ:   LiteralNumber,
+									Value: "1",
+								},
+								Op2: &Identifier{
+									Name: "x",
+								},
 							},
-							Op2: &Identifier{
-								Name: "x",
+							ResolvedType: &BasicType{"int"},
+						},
+						Stab: &SymbolTable{
+							Entries: map[string]TypeInfo{
+								"x": &BasicType{"int"},
+								"y": &BasicType{"int"},
 							},
 						},
-						ResolvedType: &BasicType{"int"},
 					},
 				},
 				Errors: nil,
+				Global: &SymbolTable{
+					Entries: map[string]TypeInfo{
+						"x": &BasicType{"int"},
+						"y": &BasicType{"int"},
+					},
+				},
 			},
 		},
 		{
@@ -368,17 +489,30 @@ func TestContextAnalyzer(t *testing.T) {
 				},
 			},
 			&AST{
-				Statements: []Expr{
-					&VariableDecl{
-						Name: "y",
-						Value: &BinaryExpr{
-							Operation: BinaryAddition,
-							Op1: &LiteralExpr{
-								Typ:   LiteralNumber,
-								Value: "1",
+				Statements: []AnnotatedExpr{
+					{
+						Expr: &VariableDecl{
+							Name: "y",
+							Value: &BinaryExpr{
+								Operation: BinaryAddition,
+								Op1: &LiteralExpr{
+									Typ:   LiteralNumber,
+									Value: "1",
+								},
+								Op2: &Identifier{
+									Name: "x",
+								},
 							},
-							Op2: &Identifier{
-								Name: "x",
+							ResolvedType: &ErrorType{},
+						},
+						Stab: &SymbolTable{
+							Entries: map[string]TypeInfo{
+								"y": &ErrorType{},
+							},
+							Errors: []CompileError{
+								&UndefinedError{
+									Name: "x",
+								},
 							},
 						},
 					},
@@ -388,16 +522,23 @@ func TestContextAnalyzer(t *testing.T) {
 						Name: "x",
 					},
 				},
+				Global: &SymbolTable{
+					Entries: map[string]TypeInfo{
+						"y": &ErrorType{},
+					},
+				},
 			},
 		},
 	}
 
-	for _, c := range cases {
+	for n, c := range cases {
 		parser := NewParserMocker(c.data)
 		analyzer := NewContextAnalyser(parser)
 
 		got := analyzer.Do()
-		assert.Equal(t, c.expect, got)
+		if !assert.Equal(t, c.expect, got) {
+			assert.Failf(t, "Unexpected", "Test %d returned unexpected value", n)
+		}
 	}
 }
 

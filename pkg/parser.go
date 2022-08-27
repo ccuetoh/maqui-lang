@@ -3,11 +3,17 @@ package maqui
 import "fmt"
 
 type AST struct {
-	Statements []Expr
+	Global     *SymbolTable
+	Statements []AnnotatedExpr
 	Errors     []CompileError
 }
 
 type Expr interface{}
+
+type AnnotatedExpr struct {
+	Stab *SymbolTable
+	Expr Expr
+}
 
 type BadExpr struct {
 	Location *Location
@@ -124,7 +130,7 @@ func (p *Parser) Run() *AST {
 	ast := &AST{}
 
 	for p.peek().Typ != TokenEOF {
-		ast.Statements = append(ast.Statements, p.statement())
+		ast.Statements = append(ast.Statements, AnnotatedExpr{Expr: p.statement()})
 	}
 
 	return ast
@@ -142,7 +148,7 @@ func (p *Parser) peek() Token {
 func (p *Parser) next() Token {
 	if p.buf != nil {
 		if !p.buf.isValid() {
-			// If an invalid token is buffered, don't try to get more tokens
+			// If an invalid token is buffered, don't try to Get more tokens
 			return *p.buf
 		}
 
