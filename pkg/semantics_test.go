@@ -65,7 +65,7 @@ func TestContextAnalyzer(t *testing.T) {
 				},
 			},
 			&AST{
-				Statements: []AnnotatedExpr{
+				Statements: []*AnnotatedExpr{
 					{
 						Expr: &FuncDecl{
 							Name: "main",
@@ -90,7 +90,7 @@ func TestContextAnalyzer(t *testing.T) {
 							},
 						},
 						Stab: &SymbolTable{
-							Entries: map[string]TypeInfo{
+							Entries: map[string]Type{
 								"x":    &BasicType{"int"},
 								"main": &FuncType{nil, nil},
 							},
@@ -98,7 +98,7 @@ func TestContextAnalyzer(t *testing.T) {
 					},
 				},
 				Global: &SymbolTable{
-					Entries: map[string]TypeInfo{
+					Entries: map[string]Type{
 						"main": &FuncType{nil, nil},
 					},
 				},
@@ -122,7 +122,7 @@ func TestContextAnalyzer(t *testing.T) {
 				},
 			},
 			&AST{
-				Statements: []AnnotatedExpr{
+				Statements: []*AnnotatedExpr{
 					{
 						Expr: &VariableDecl{
 							Name: "x",
@@ -137,11 +137,11 @@ func TestContextAnalyzer(t *testing.T) {
 									Value: "text",
 								},
 							},
-							ResolvedType: &ErrorType{},
+							ResolvedType: &TypeErr{TypeErrIncompatible},
 						},
 						Stab: &SymbolTable{
-							Entries: map[string]TypeInfo{
-								"x": &ErrorType{},
+							Entries: map[string]Type{
+								"x": &TypeErr{TypeErrIncompatible},
 							},
 							Errors: []CompileError{
 								&IncompatibleTypesError{
@@ -159,8 +159,8 @@ func TestContextAnalyzer(t *testing.T) {
 					},
 				},
 				Global: &SymbolTable{
-					Entries: map[string]TypeInfo{
-						"x": &ErrorType{},
+					Entries: map[string]Type{
+						"x": &TypeErr{TypeErrIncompatible},
 					},
 				},
 			},
@@ -177,14 +177,14 @@ func TestContextAnalyzer(t *testing.T) {
 				},
 			},
 			&AST{
-				Statements: []AnnotatedExpr{
+				Statements: []*AnnotatedExpr{
 					{
 						Expr: &FuncDecl{
 							Name: "foo",
 							Body: []Expr{},
 						},
 						Stab: &SymbolTable{
-							Entries: map[string]TypeInfo{
+							Entries: map[string]Type{
 								"foo": &FuncType{nil, nil},
 							},
 						},
@@ -195,7 +195,7 @@ func TestContextAnalyzer(t *testing.T) {
 							Args: []Expr{},
 						},
 						Stab: &SymbolTable{
-							Entries: map[string]TypeInfo{
+							Entries: map[string]Type{
 								"foo": &FuncType{nil, nil},
 							},
 						},
@@ -203,7 +203,7 @@ func TestContextAnalyzer(t *testing.T) {
 				},
 				Errors: nil,
 				Global: &SymbolTable{
-					Entries: map[string]TypeInfo{
+					Entries: map[string]Type{
 						"foo": &FuncType{nil, nil},
 					},
 				},
@@ -217,14 +217,14 @@ func TestContextAnalyzer(t *testing.T) {
 				},
 			},
 			&AST{
-				Statements: []AnnotatedExpr{
+				Statements: []*AnnotatedExpr{
 					{
 						Expr: &FuncCall{
 							Name: "foo",
 							Args: []Expr{},
 						},
 						Stab: &SymbolTable{
-							Entries: map[string]TypeInfo{},
+							Entries: map[string]Type{},
 							Errors: []CompileError{
 								&UndefinedError{
 									Name: "foo",
@@ -248,13 +248,13 @@ func TestContextAnalyzer(t *testing.T) {
 				},
 			},
 			&AST{
-				Statements: []AnnotatedExpr{
+				Statements: []*AnnotatedExpr{
 					{
 						Expr: &Identifier{
 							Name: "x",
 						},
 						Stab: &SymbolTable{
-							Entries: map[string]TypeInfo{},
+							Entries: map[string]Type{},
 							Errors: []CompileError{
 								&UndefinedError{
 									Name: "x",
@@ -282,7 +282,7 @@ func TestContextAnalyzer(t *testing.T) {
 				},
 			},
 			&AST{
-				Statements: []AnnotatedExpr{
+				Statements: []*AnnotatedExpr{
 					{
 						Expr: &UnaryExpr{
 							Operation: UnaryNegative,
@@ -309,7 +309,7 @@ func TestContextAnalyzer(t *testing.T) {
 				},
 			},
 			&AST{
-				Statements: []AnnotatedExpr{
+				Statements: []*AnnotatedExpr{
 					{
 						Expr: &UnaryExpr{
 							Operation: UnaryNegative,
@@ -319,7 +319,7 @@ func TestContextAnalyzer(t *testing.T) {
 							},
 						},
 						Stab: &SymbolTable{
-							Entries: map[string]TypeInfo{},
+							Entries: map[string]Type{},
 							Errors: []CompileError{
 								&UndefinedUnitaryError{
 									Type: &BasicType{"string"},
@@ -353,7 +353,7 @@ func TestContextAnalyzer(t *testing.T) {
 				},
 			},
 			&AST{
-				Statements: []AnnotatedExpr{
+				Statements: []*AnnotatedExpr{
 					{
 						Expr: &BinaryExpr{
 							Operation: BinarySubtraction,
@@ -367,7 +367,7 @@ func TestContextAnalyzer(t *testing.T) {
 							},
 						},
 						Stab: &SymbolTable{
-							Entries: map[string]TypeInfo{},
+							Entries: map[string]Type{},
 							Errors: []CompileError{
 								&UndefinedOperationError{
 									Type: &BasicType{"string"},
@@ -417,7 +417,7 @@ func TestContextAnalyzer(t *testing.T) {
 				},
 			},
 			&AST{
-				Statements: []AnnotatedExpr{
+				Statements: []*AnnotatedExpr{
 					{
 						Expr: &VariableDecl{
 							Name: "x",
@@ -435,8 +435,9 @@ func TestContextAnalyzer(t *testing.T) {
 							ResolvedType: &BasicType{"int"},
 						},
 						Stab: &SymbolTable{
-							Entries: map[string]TypeInfo{
+							Entries: map[string]Type{
 								"x": &BasicType{"int"},
+								"y": &BasicType{"int"},
 							},
 						},
 					},
@@ -456,7 +457,7 @@ func TestContextAnalyzer(t *testing.T) {
 							ResolvedType: &BasicType{"int"},
 						},
 						Stab: &SymbolTable{
-							Entries: map[string]TypeInfo{
+							Entries: map[string]Type{
 								"x": &BasicType{"int"},
 								"y": &BasicType{"int"},
 							},
@@ -465,7 +466,7 @@ func TestContextAnalyzer(t *testing.T) {
 				},
 				Errors: nil,
 				Global: &SymbolTable{
-					Entries: map[string]TypeInfo{
+					Entries: map[string]Type{
 						"x": &BasicType{"int"},
 						"y": &BasicType{"int"},
 					},
@@ -489,7 +490,7 @@ func TestContextAnalyzer(t *testing.T) {
 				},
 			},
 			&AST{
-				Statements: []AnnotatedExpr{
+				Statements: []*AnnotatedExpr{
 					{
 						Expr: &VariableDecl{
 							Name: "y",
@@ -503,11 +504,11 @@ func TestContextAnalyzer(t *testing.T) {
 									Name: "x",
 								},
 							},
-							ResolvedType: &ErrorType{},
+							ResolvedType: &TypeErr{TypeErrUndefined},
 						},
 						Stab: &SymbolTable{
-							Entries: map[string]TypeInfo{
-								"y": &ErrorType{},
+							Entries: map[string]Type{
+								"y": &TypeErr{TypeErrUndefined},
 							},
 							Errors: []CompileError{
 								&UndefinedError{
@@ -523,8 +524,8 @@ func TestContextAnalyzer(t *testing.T) {
 					},
 				},
 				Global: &SymbolTable{
-					Entries: map[string]TypeInfo{
-						"y": &ErrorType{},
+					Entries: map[string]Type{
+						"y": &TypeErr{TypeErrUndefined},
 					},
 				},
 			},
@@ -535,7 +536,17 @@ func TestContextAnalyzer(t *testing.T) {
 		parser := NewParserMocker(c.data)
 		analyzer := NewContextAnalyser(parser)
 
-		got := analyzer.Do()
+		global := NewGlobalSymbolTable()
+		analyzer.Define(global)
+		global.Errors = nil
+
+		// Bring global definitions into the expected global table
+		c.expect.Global.Merge(*NewGlobalSymbolTable())
+		for _, ae := range c.expect.Statements {
+			ae.Stab.Merge(*NewGlobalSymbolTable())
+		}
+
+		got := analyzer.Do(global)
 		if !assert.Equal(t, c.expect, got) {
 			assert.Failf(t, "Unexpected", "Test %d returned unexpected value", n)
 		}
@@ -609,4 +620,32 @@ func TestTypeString(t *testing.T) {
 
 	assert.Equal(t, "int", tInt.String())
 	assert.Equal(t, "func(string, int) string, int", tFunc.String())
+}
+
+func TestStabCopy(t *testing.T) {
+	stab := &SymbolTable{
+		Entries: map[string]Type{
+			"foo": &BasicType{"int"},
+			"bar": &FuncType{
+				Args: []*ArgumentType{
+					{
+						Name: "arg1",
+						Type: &BasicType{"string"},
+					},
+				},
+				Returns: []*BasicType{
+					{"string"},
+					{"int"},
+				},
+			},
+		},
+		Errors: []CompileError{
+			UndefinedOperationError{
+				Type: &BasicType{"string"},
+				Op:   BinarySubtraction,
+			},
+		},
+	}
+
+	assert.Equal(t, stab, stab.Copy())
 }

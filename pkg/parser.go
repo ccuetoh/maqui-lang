@@ -4,7 +4,7 @@ import "fmt"
 
 type AST struct {
 	Global     *SymbolTable
-	Statements []AnnotatedExpr
+	Statements []*AnnotatedExpr
 	Errors     []CompileError
 }
 
@@ -28,13 +28,13 @@ type FuncDecl struct {
 type VariableDecl struct {
 	Name         string
 	Value        Expr
-	ResolvedType TypeInfo
+	ResolvedType Type
 }
 
 type FuncCall struct {
 	Name          string
 	Args          []Expr
-	ResolvedTypes []TypeInfo
+	ResolvedTypes []Type
 }
 
 type Identifier struct {
@@ -130,7 +130,9 @@ func (p *Parser) Run() *AST {
 	ast := &AST{}
 
 	for p.peek().Typ != TokenEOF {
-		ast.Statements = append(ast.Statements, AnnotatedExpr{Expr: p.statement()})
+		ast.Statements = append(ast.Statements, &AnnotatedExpr{
+			Expr: p.statement(),
+		})
 	}
 
 	return ast

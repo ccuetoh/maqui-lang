@@ -3,44 +3,63 @@ package maqui
 import "strings"
 
 type SemanticAnalyser interface {
+	Define(*SymbolTable)
 	Do() *AST
 }
 
 type ContextAnalyzer struct {
 	filename string
 	parser   SyntacticAnalyzer
+
+	cache   []Expr
+	live    bool
+	started bool
+	index   int
 }
 
 func NewContextAnalyser(parser SyntacticAnalyzer) *ContextAnalyzer {
 	return &ContextAnalyzer{
 		filename: parser.GetFilename(),
 		parser:   parser,
+		live:     true,
 	}
 }
 
-func (c *ContextAnalyzer) Do() *AST {
-	go c.parser.Do()
+func (c *ContextAnalyzer) Define(scope *SymbolTable) {
+	c.reset()
 
-	ast := &AST{Global: NewGlobalSymbolTable()}
 	for {
-		expr := c.parser.Get()
-		_, ok := expr.(*EOS)
-		if ok {
-			// End-of-stream
+		expr := c.get()
+		if expr == nil {
+			break
+		}
+
+		if e, isVarDef := expr.(*VariableDecl); isVarDef {
+			scope.Add(e.Name, c.resolve(scope, e.Value))
+		}
+
+		if e, isFuncDef := expr.(*FuncDecl); isFuncDef {
+			c.addFunction(scope, e)
+		}
+	}
+}
+
+func (c *ContextAnalyzer) Do(global *SymbolTable) *AST {
+	c.reset()
+
+	ast := &AST{
+		Global: global,
+	}
+
+	for {
+		expr := c.get()
+		if expr == nil {
 			break
 		}
 
 		stab := c.analyze(*ast.Global.Copy(), expr)
-		if e, isVarDef := expr.(*VariableDecl); isVarDef {
-			ast.Global.Add(e.Name, stab.Get(e.Name))
-		}
-
-		if e, isFuncDef := expr.(*FuncDecl); isFuncDef {
-			ast.Global.Add(e.Name, stab.Get(e.Name))
-		}
-
-		ast.Statements = append(ast.Statements, AnnotatedExpr{
-			Stab: &stab,
+		ast.Statements = append(ast.Statements, &AnnotatedExpr{
+			Stab: stab.Copy(),
 			Expr: expr,
 		})
 
@@ -62,6 +81,37 @@ func (c *ContextAnalyzer) Do() *AST {
 	return ast
 }
 
+func (c *ContextAnalyzer) get() Expr {
+	if c.live {
+		if !c.started {
+			go c.parser.Do()
+			c.started = true
+		}
+
+		expr := c.parser.Get()
+		_, ok := expr.(*EOS)
+		if ok {
+			c.live = false
+			return nil
+		}
+
+		c.cache = append(c.cache, expr)
+		return expr
+	}
+
+	if c.index >= len(c.cache) {
+		return nil
+	}
+
+	expr := c.cache[c.index]
+	c.index++
+	return expr
+}
+
+func (c *ContextAnalyzer) reset() {
+	c.index = 0
+}
+
 func (c *ContextAnalyzer) analyze(stab SymbolTable, expr Expr) SymbolTable {
 	switch e := expr.(type) {
 	case *BadExpr:
@@ -76,11 +126,6 @@ func (c *ContextAnalyzer) analyze(stab SymbolTable, expr Expr) SymbolTable {
 		return stab
 	case *VariableDecl:
 		t := c.resolve(&stab, e.Value)
-		if t == nil {
-			// Error already logged by the type resolution
-			break
-		}
-
 		stab.Add(e.Name, t)
 		e.ResolvedType = t
 	case *FuncCall:
@@ -114,11 +159,11 @@ func (c *ContextAnalyzer) analyze(stab SymbolTable, expr Expr) SymbolTable {
 	return stab
 }
 
-func (c *ContextAnalyzer) resolve(stab *SymbolTable, expr Expr) TypeInfo {
+func (c *ContextAnalyzer) resolve(stab *SymbolTable, expr Expr) Type {
 	switch e := expr.(type) {
 	case *BadExpr:
 		stab.AddError(&BadExprError{e})
-		return &ErrorType{}
+		return &TypeErr{TypeErrBadExpression}
 	case *Identifier:
 		if t := stab.Get(e.Name); t != nil {
 			return t
@@ -129,14 +174,19 @@ func (c *ContextAnalyzer) resolve(stab *SymbolTable, expr Expr) TypeInfo {
 			Loc:  nil, // TODO
 		})
 
-		return &ErrorType{}
+		return &TypeErr{TypeErrUndefined}
 	case *BinaryExpr:
 		t1 := c.resolve(stab, e.Op1)
 		t2 := c.resolve(stab, e.Op2)
 
-		if t1 == nil || t2 == nil || c.isErrorType(t1) || c.isErrorType(t2) {
+		if c.isErrorType(t1) {
 			// Error already logged by the type resolution
-			return &ErrorType{}
+			return t1
+		}
+
+		if c.isErrorType(t2) {
+			// Error already logged by the type resolution
+			return t2
 		}
 
 		if !t1.Equals(t2) {
@@ -146,7 +196,7 @@ func (c *ContextAnalyzer) resolve(stab *SymbolTable, expr Expr) TypeInfo {
 				Loc:   nil, // TODO
 			})
 
-			return &ErrorType{}
+			return &TypeErr{TypeErrIncompatible}
 		}
 
 		if !c.isOpDefined(t1, e.Operation) {
@@ -156,7 +206,7 @@ func (c *ContextAnalyzer) resolve(stab *SymbolTable, expr Expr) TypeInfo {
 				Loc:  nil, // TODO
 			})
 
-			return &ErrorType{}
+			return &TypeErr{TypeErrBadOp}
 		}
 
 		return t1
@@ -168,7 +218,7 @@ func (c *ContextAnalyzer) resolve(stab *SymbolTable, expr Expr) TypeInfo {
 				Loc:  nil, // TODO
 			})
 
-			return &ErrorType{}
+			return &TypeErr{TypeErrBadOp}
 		} else {
 			return t
 		}
@@ -180,11 +230,11 @@ func (c *ContextAnalyzer) resolve(stab *SymbolTable, expr Expr) TypeInfo {
 		case LiteralNumber:
 			return &BasicType{"int"}
 		default:
-			return nil // TODO Log error
+			return &TypeErr{"unimplemented"} // TODO Log error
 		}
 	}
 
-	return &ErrorType{}
+	return &TypeErr{"unknown"}
 }
 
 func (c *ContextAnalyzer) addFunction(stab *SymbolTable, e *FuncDecl) {
@@ -194,7 +244,7 @@ func (c *ContextAnalyzer) addFunction(stab *SymbolTable, e *FuncDecl) {
 	stab.Add(e.Name, entry)
 }
 
-func (c *ContextAnalyzer) isOpDefined(t TypeInfo, op BinaryOp) bool {
+func (c *ContextAnalyzer) isOpDefined(t Type, op BinaryOp) bool {
 	if _, isFunc := t.(*FuncType); isFunc {
 		return false
 	}
@@ -208,26 +258,50 @@ func (c *ContextAnalyzer) isOpDefined(t TypeInfo, op BinaryOp) bool {
 	return true
 }
 
-func (c *ContextAnalyzer) isErrorType(t TypeInfo) bool {
-	if _, isErr := t.(*ErrorType); isErr {
+func (c *ContextAnalyzer) isErrorType(t Type) bool {
+	if _, isErr := t.(*TypeErr); isErr {
 		return true
 	}
 
 	return false
 }
 
-type TypeInfo interface {
+type Type interface {
 	String() string
-	Equals(t2 TypeInfo) bool
-}
-type ErrorType struct{}
-
-func (t *ErrorType) String() string {
-	return "~error"
+	Equals(t2 Type) bool
 }
 
-func (t *ErrorType) Equals(_ TypeInfo) bool {
+type TypeErr struct {
+	Reason string
+}
+
+const (
+	TypeErrUndefined     = "undefined"
+	TypeErrBadExpression = "bad expr"
+	TypeErrIncompatible  = "incompatible"
+	TypeErrBadOp         = "bad op"
+)
+
+func (t *TypeErr) String() string {
+	return "~error:" + t.Reason
+}
+
+func (t *TypeErr) Equals(_ Type) bool {
 	return false
+}
+
+type AnyType struct{}
+
+func (t *AnyType) String() string {
+	return "~any"
+}
+
+func (t *AnyType) Equals(t2 Type) bool {
+	if _, isErr := t2.(*TypeErr); isErr {
+		return false
+	}
+
+	return true
 }
 
 type BasicType struct {
@@ -238,7 +312,7 @@ func (t *BasicType) String() string {
 	return t.Typ
 }
 
-func (t *BasicType) Equals(t2 TypeInfo) bool {
+func (t *BasicType) Equals(t2 Type) bool {
 	if typ, ok := t2.(*BasicType); ok {
 		return t.Typ == typ.Typ
 	}
@@ -248,14 +322,14 @@ func (t *BasicType) Equals(t2 TypeInfo) bool {
 
 type ArgumentType struct {
 	Name string
-	Type *BasicType
+	Type Type
 }
 
 func (t *ArgumentType) String() string {
 	return t.Type.String()
 }
 
-func (t *ArgumentType) Equals(t2 TypeInfo) bool {
+func (t *ArgumentType) Equals(t2 Type) bool {
 	if typ, ok := t2.(*ArgumentType); ok {
 		return t.Name == typ.Name && t.Type.Equals(typ.Type)
 	}
@@ -292,7 +366,7 @@ func (t *FuncType) String() string {
 	return str.String()
 }
 
-func (t *FuncType) Equals(t2 TypeInfo) bool {
+func (t *FuncType) Equals(t2 Type) bool {
 	if typ, ok := t2.(*FuncType); ok {
 		for i, arg := range t.Args {
 			if i >= len(typ.Args) {
@@ -332,45 +406,55 @@ type UndefinedError struct {
 }
 
 type IncompatibleTypesError struct {
-	Type1 TypeInfo
-	Type2 TypeInfo
+	Type1 Type
+	Type2 Type
 	Loc   *Location
 }
 
 type UndefinedOperationError struct {
-	Type TypeInfo
+	Type Type
 	Op   BinaryOp
 	Loc  *Location
 }
 
 type UndefinedUnitaryError struct {
-	Type TypeInfo
+	Type Type
 	Op   UnaryOp
 	Loc  *Location
 }
 
 type SymbolTable struct {
-	Entries map[string]TypeInfo
+	Entries map[string]Type
 	Errors  []CompileError
 }
 
 func NewGlobalSymbolTable() *SymbolTable {
 	return &SymbolTable{
-		Entries: make(map[string]TypeInfo),
+		Entries: map[string]Type{
+			"print": &FuncType{
+				Args: []*ArgumentType{
+					{
+						Name: "v",
+						Type: &AnyType{},
+					},
+				},
+				Returns: nil,
+			},
+		},
 	}
 }
 
 func NewSymbolTable() *SymbolTable {
 	return &SymbolTable{
-		Entries: make(map[string]TypeInfo),
+		Entries: make(map[string]Type),
 	}
 }
 
-func (t *SymbolTable) Add(name string, typ TypeInfo) {
+func (t *SymbolTable) Add(name string, typ Type) {
 	t.Entries[name] = typ
 }
 
-func (t *SymbolTable) Get(name string) TypeInfo {
+func (t *SymbolTable) Get(name string) Type {
 	typ, contains := t.Entries[name]
 	if !contains {
 		return nil
@@ -391,7 +475,11 @@ func (t *SymbolTable) Merge(t2 SymbolTable) {
 
 func (t *SymbolTable) Copy() *SymbolTable {
 	t2 := NewSymbolTable()
-	copy(t.Errors, t2.Errors)
+
+	if t.Errors != nil {
+		t2.Errors = make([]CompileError, len(t.Errors))
+		copy(t2.Errors, t.Errors)
+	}
 
 	for k, v := range t.Entries {
 		t2.Entries[k] = v

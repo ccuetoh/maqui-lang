@@ -271,7 +271,9 @@ func TestParser(t *testing.T) {
 		expect := &AST{}
 
 		for _, e := range c.expect {
-			expect.Statements = append(expect.Statements, AnnotatedExpr{Expr: e})
+			expect.Statements = append(expect.Statements, &AnnotatedExpr{
+				Expr: e,
+			})
 		}
 
 		if c.fail {
