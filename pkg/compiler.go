@@ -1,9 +1,5 @@
 package maqui
 
-import (
-	"io"
-)
-
 type Compiler struct{}
 
 func NewCompiler() *Compiler {
@@ -18,18 +14,10 @@ func (c *Compiler) Compile(filename string) (error, []CompileError) {
 
 	parser := NewParser(lexer)
 	analyzer := NewContextAnalyser(parser)
-	return nil, c.compile(analyzer)
-}
 
-func (c *Compiler) CompileFromReader(reader io.Reader) []CompileError {
-	lexer := NewLexerFromReader(reader)
-	parser := NewParser(lexer)
-	analyzer := NewContextAnalyser(parser)
+	global := NewGlobalSymbolTable()
+	analyzer.Define(global)
+	ast := analyzer.Do(global)
 
-	return c.compile(analyzer)
-}
-
-func (c *Compiler) compile(ca *ContextAnalyzer) []CompileError {
-	ast := ca.Do()
-	return ast.Errors
+	return nil, ast.Errors
 }
