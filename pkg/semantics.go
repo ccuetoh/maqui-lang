@@ -48,7 +48,8 @@ func (c *ContextAnalyzer) Do(global *SymbolTable) *AST {
 	c.reset()
 
 	ast := &AST{
-		Global: global,
+		Global:   global,
+		Filename: c.filename,
 	}
 
 	for {

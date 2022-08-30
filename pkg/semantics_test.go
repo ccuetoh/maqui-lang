@@ -536,6 +536,8 @@ func TestContextAnalyzer(t *testing.T) {
 		parser := NewParserMocker(c.data)
 		analyzer := NewContextAnalyser(parser)
 
+		c.expect.Filename = parser.GetFilename()
+
 		global := NewGlobalSymbolTable()
 		analyzer.Define(global)
 		global.Errors = nil

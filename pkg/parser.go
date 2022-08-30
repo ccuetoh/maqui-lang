@@ -6,6 +6,7 @@ type AST struct {
 	Global     *SymbolTable
 	Statements []*AnnotatedExpr
 	Errors     []CompileError
+	Filename   string
 }
 
 type Expr interface{}
@@ -127,7 +128,9 @@ func (p *Parser) Do() {
 func (p *Parser) Run() *AST {
 	go p.tokenizer.Do()
 
-	ast := &AST{}
+	ast := &AST{
+		Filename: p.GetFilename(),
+	}
 
 	for p.peek().Typ != TokenEOF {
 		ast.Statements = append(ast.Statements, &AnnotatedExpr{

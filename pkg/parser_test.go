@@ -281,7 +281,7 @@ func TestParser(t *testing.T) {
 		p := NewParser(tokenizer)
 
 		got := p.Run()
-		expect := &AST{}
+		expect := &AST{Filename: p.GetFilename()}
 
 		for _, e := range c.expect {
 			expect.Statements = append(expect.Statements, &AnnotatedExpr{
