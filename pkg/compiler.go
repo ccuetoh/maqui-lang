@@ -6,10 +6,10 @@ func NewCompiler() *Compiler {
 	return &Compiler{}
 }
 
-func (c *Compiler) Compile(filename string) (error, []CompileError) {
+func (c *Compiler) Compile(filename string) ([]CompileError, error) {
 	lexer, err := NewLexer(filename)
 	if err != nil {
-		return err, nil
+		return nil, err
 	}
 
 	parser := NewParser(lexer)
@@ -19,5 +19,5 @@ func (c *Compiler) Compile(filename string) (error, []CompileError) {
 	analyzer.Define(global)
 	ast := analyzer.Do(global)
 
-	return nil, ast.Errors
+	return ast.Errors, nil
 }
