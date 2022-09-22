@@ -1,6 +1,9 @@
 package maqui
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 type SemanticAnalyser interface {
 	Define(*SymbolTable)
@@ -116,7 +119,10 @@ func (c *ContextAnalyzer) reset() {
 func (c *ContextAnalyzer) analyze(stab SymbolTable, expr Expr) SymbolTable {
 	switch e := expr.(type) {
 	case *BadExpr:
-		stab.AddError(&BadExprError{e})
+		stab.AddError(&BadExprError{
+			Loc:  e.GetLocation(),
+			Expr: e,
+		})
 		return stab
 	case *FuncDecl:
 		c.addFunction(&stab, e)
@@ -132,8 +138,8 @@ func (c *ContextAnalyzer) analyze(stab SymbolTable, expr Expr) SymbolTable {
 	case *FuncCall:
 		if stab.Get(e.Name) == nil {
 			stab.AddError(&UndefinedError{
+				Loc:  e.GetLocation(),
 				Name: e.Name,
-				Loc:  nil, // TODO
 			})
 
 			break
@@ -146,8 +152,8 @@ func (c *ContextAnalyzer) analyze(stab SymbolTable, expr Expr) SymbolTable {
 	case *Identifier:
 		if stab.Get(e.Name) == nil {
 			stab.AddError(&UndefinedError{
+				Loc:  e.GetLocation(),
 				Name: e.Name,
-				Loc:  nil, // TODO
 			})
 		}
 	case *BinaryExpr:
@@ -163,7 +169,10 @@ func (c *ContextAnalyzer) analyze(stab SymbolTable, expr Expr) SymbolTable {
 func (c *ContextAnalyzer) resolve(stab *SymbolTable, expr Expr) Type {
 	switch e := expr.(type) {
 	case *BadExpr:
-		stab.AddError(&BadExprError{e})
+		stab.AddError(&BadExprError{
+			Loc:  e.GetLocation(),
+			Expr: e,
+		})
 		return &TypeErr{TypeErrBadExpression}
 	case *Identifier:
 		if t := stab.Get(e.Name); t != nil {
@@ -171,8 +180,8 @@ func (c *ContextAnalyzer) resolve(stab *SymbolTable, expr Expr) Type {
 		}
 
 		stab.AddError(&UndefinedError{
+			Loc:  e.GetLocation(),
 			Name: e.Name,
-			Loc:  nil, // TODO
 		})
 
 		return &TypeErr{TypeErrUndefined}
@@ -192,9 +201,9 @@ func (c *ContextAnalyzer) resolve(stab *SymbolTable, expr Expr) Type {
 
 		if !t1.Equals(t2) {
 			stab.AddError(&IncompatibleTypesError{
+				Loc:   e.GetLocation(),
 				Type1: t1,
 				Type2: t2,
-				Loc:   nil, // TODO
 			})
 
 			return &TypeErr{TypeErrIncompatible}
@@ -202,9 +211,9 @@ func (c *ContextAnalyzer) resolve(stab *SymbolTable, expr Expr) Type {
 
 		if !c.isOpDefined(t1, e.Operation) {
 			stab.AddError(&UndefinedOperationError{
+				Loc:  e.GetLocation(),
 				Type: t1,
 				Op:   e.Operation,
-				Loc:  nil, // TODO
 			})
 
 			return &TypeErr{TypeErrBadOp}
@@ -214,9 +223,9 @@ func (c *ContextAnalyzer) resolve(stab *SymbolTable, expr Expr) Type {
 	case *UnaryExpr:
 		if t, isBasicType := c.resolve(stab, e.Operand).(*BasicType); isBasicType && t.Typ != "int" {
 			stab.AddError(&UndefinedUnitaryError{
+				Loc:  e.GetLocation(),
 				Type: t,
 				Op:   e.Operation,
-				Loc:  nil, // TODO
 			})
 
 			return &TypeErr{TypeErrBadOp}
@@ -395,33 +404,56 @@ func (t *FuncType) Equals(t2 Type) bool {
 	return false
 }
 
-type CompileError interface{}
+type CompileError interface {
+	fmt.Stringer
+}
 
 type BadExprError struct {
+	Loc  *Location
 	Expr *BadExpr
 }
 
+func (e BadExprError) String() string {
+	return fmt.Sprintf("%s bad expression: %s", e.Loc, e.Expr.Error)
+}
+
 type UndefinedError struct {
-	Name string
 	Loc  *Location
+	Name string
+}
+
+func (e UndefinedError) String() string {
+	return fmt.Sprintf("%s undefined: %s", e.Loc, e.Name)
 }
 
 type IncompatibleTypesError struct {
+	Loc   *Location
 	Type1 Type
 	Type2 Type
-	Loc   *Location
+}
+
+func (e IncompatibleTypesError) String() string {
+	return fmt.Sprintf("%s incompatible types: '%s' and '%s'", e.Loc, e.Type1, e.Type2)
 }
 
 type UndefinedOperationError struct {
+	Loc  *Location
 	Type Type
 	Op   BinaryOp
-	Loc  *Location
+}
+
+func (e UndefinedOperationError) String() string {
+	return fmt.Sprintf("%s undefined operation: '%s' has no operand '%s'", e.Loc, e.Type, e.Op)
 }
 
 type UndefinedUnitaryError struct {
+	Loc  *Location
 	Type Type
 	Op   UnaryOp
-	Loc  *Location
+}
+
+func (e UndefinedUnitaryError) String() string {
+	return fmt.Sprintf("%s undefined operation: '%s' has no operand '%s'", e.Loc, e.Type, e.Op)
 }
 
 type SymbolTable struct {

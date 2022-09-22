@@ -9,11 +9,17 @@ type AST struct {
 	Filename   string
 }
 
-type Expr interface{}
+type Expr interface {
+	GetLocation() *Location
+}
 
 type AnnotatedExpr struct {
 	Stab *SymbolTable
 	Expr Expr
+}
+
+func (a AnnotatedExpr) GetLocation() *Location {
+	return a.Expr.GetLocation()
 }
 
 type BadExpr struct {
@@ -21,28 +27,58 @@ type BadExpr struct {
 	Error    string
 }
 
+func (e *BadExpr) GetLocation() *Location {
+	return e.Location
+}
+
 type FuncDecl struct {
-	Name string
-	Body []Expr
+	Location *Location
+	Name     string
+	Body     []Expr
+}
+
+func (e FuncDecl) GetLocation() *Location {
+	return e.Location
 }
 
 type VariableDecl struct {
+	Location     *Location
 	Name         string
 	Value        Expr
 	ResolvedType Type
 }
 
+func (e VariableDecl) GetLocation() *Location {
+	return e.Location
+}
+
 type FuncCall struct {
+	Location      *Location
 	Name          string
 	Args          []Expr
 	ResolvedTypes []Type
 }
 
-type Identifier struct {
-	Name string
+func (e FuncCall) GetLocation() *Location {
+	return e.Location
 }
 
-type EOS struct{}
+type Identifier struct {
+	Location *Location
+	Name     string
+}
+
+func (i Identifier) GetLocation() *Location {
+	return i.Location
+}
+
+type EOS struct {
+	Location *Location
+}
+
+func (e EOS) GetLocation() *Location {
+	return e.Location
+}
 
 type BinaryOp string
 
@@ -54,9 +90,14 @@ const (
 )
 
 type BinaryExpr struct {
+	Location  *Location
 	Operation BinaryOp
 	Op1       Expr
 	Op2       Expr
+}
+
+func (e BinaryExpr) GetLocation() *Location {
+	return e.Location
 }
 
 type UnaryOp string
@@ -66,8 +107,13 @@ const (
 )
 
 type UnaryExpr struct {
+	Location  *Location
 	Operation UnaryOp
 	Operand   Expr
+}
+
+func (e UnaryExpr) GetLocation() *Location {
+	return e.Location
 }
 
 type LiteralType int
@@ -78,8 +124,13 @@ const (
 )
 
 type LiteralExpr struct {
-	Typ   LiteralType
-	Value string
+	Location *Location
+	Typ      LiteralType
+	Value    string
+}
+
+func (e LiteralExpr) GetLocation() *Location {
+	return e.Location
 }
 
 type SyntacticAnalyzer interface {
@@ -102,6 +153,7 @@ func NewParser(tokenizer Tokenizer) *Parser {
 		output:    make(chan Expr, 2),
 	}
 }
+
 func (p *Parser) Get() Expr {
 	return <-p.Chan()
 }
@@ -121,7 +173,7 @@ func (p *Parser) Do() {
 		p.output <- p.statement()
 	}
 
-	p.output <- &EOS{}
+	p.output <- &EOS{p.next().Loc}
 	close(p.output)
 }
 
@@ -153,7 +205,7 @@ func (p *Parser) peek() Token {
 func (p *Parser) next() Token {
 	if p.buf != nil {
 		if !p.buf.isValid() {
-			// If an invalid token is buffered, don't try to Get more tokens
+			// If an invalid token is buffered, don't try to get more tokens
 			return *p.buf
 		}
 
@@ -199,7 +251,10 @@ func (p *Parser) consume(typ TokenType) bool {
 }
 
 func (p *Parser) errorf(l *Location, format string, args ...interface{}) Expr {
-	return &BadExpr{l, fmt.Sprintf(format, args...)}
+	return &BadExpr{
+		Location: l,
+		Error:    fmt.Sprintf(format, args...),
+	}
 }
 
 func (p *Parser) statement() Expr {
@@ -225,8 +280,9 @@ func (p *Parser) funcDecl() Expr {
 	}
 
 	return &FuncDecl{
-		Name: name.Value,
-		Body: p.blockStmt(),
+		Location: start,
+		Name:     name.Value,
+		Body:     p.blockStmt(),
 	}
 }
 
@@ -319,6 +375,7 @@ func (p *Parser) additiveExpr() Expr {
 
 			rhs := p.additiveExpr()
 			lhs = &BinaryExpr{
+				Location:  tok.Loc,
 				Operation: BinaryOp(tok.Value),
 				Op1:       lhs,
 				Op2:       rhs,
@@ -343,6 +400,7 @@ func (p *Parser) multiplicativeExpr() Expr {
 
 			rhs := p.multiplicativeExpr()
 			lhs = &BinaryExpr{
+				Location:  lhs.GetLocation(),
 				Operation: BinaryOp(tok.Value),
 				Op1:       lhs,
 				Op2:       rhs,
@@ -359,9 +417,10 @@ func (p *Parser) multiplicativeExpr() Expr {
 
 func (p *Parser) unaryExpr() Expr {
 	if p.check(TokenMinus) { // Unary negative
-		p.next()
+		tok := p.next()
 
 		return &UnaryExpr{
+			Location:  tok.Loc,
 			Operation: UnaryNegative,
 			Operand:   p.primary(),
 		}
@@ -402,7 +461,8 @@ func (p *Parser) identifier() Expr {
 	}
 
 	return &Identifier{
-		Name: tok.Value,
+		Location: tok.Loc,
+		Name:     tok.Value,
 	}
 }
 
@@ -410,13 +470,15 @@ func (p *Parser) literal() Expr {
 	switch tok := p.peek(); tok.Typ {
 	case TokenNumber:
 		return &LiteralExpr{
-			Typ:   LiteralNumber,
-			Value: p.next().Value,
+			Location: tok.Loc,
+			Typ:      LiteralNumber,
+			Value:    p.next().Value,
 		}
 	case TokenString:
 		return &LiteralExpr{
-			Typ:   LiteralString,
-			Value: p.next().Value,
+			Location: tok.Loc,
+			Typ:      LiteralString,
+			Value:    p.next().Value,
 		}
 	default:
 		p.next() // Skip errored token

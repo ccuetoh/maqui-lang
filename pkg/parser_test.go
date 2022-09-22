@@ -156,8 +156,8 @@ func TestParser(t *testing.T) {
 				&FuncCall{
 					Name: "foo",
 					Args: []Expr{
-						&LiteralExpr{LiteralString, "arg1"},
-						&LiteralExpr{LiteralNumber, "2"},
+						&LiteralExpr{Typ: LiteralString, Value: "arg1"},
+						&LiteralExpr{Typ: LiteralNumber, Value: "2"},
 					},
 				},
 			},
@@ -177,9 +177,9 @@ func TestParser(t *testing.T) {
 					Name: "foo",
 					Args: []Expr{
 						&BinaryExpr{
-							BinaryAddition,
-							&LiteralExpr{LiteralNumber, "1"},
-							&LiteralExpr{LiteralNumber, "2"},
+							Operation: BinaryAddition,
+							Op1:       &LiteralExpr{Typ: LiteralNumber, Value: "1"},
+							Op2:       &LiteralExpr{Typ: LiteralNumber, Value: "2"},
 						},
 					},
 				},
@@ -208,11 +208,11 @@ func TestParser(t *testing.T) {
 			[]Expr{
 				&BinaryExpr{
 					Operation: BinaryAddition,
-					Op1:       &LiteralExpr{LiteralNumber, "1"},
+					Op1:       &LiteralExpr{Typ: LiteralNumber, Value: "1"},
 					Op2: &BinaryExpr{
 						Operation: BinaryMultiplication,
-						Op1:       &LiteralExpr{LiteralNumber, "2"},
-						Op2:       &LiteralExpr{LiteralNumber, "3"},
+						Op1:       &LiteralExpr{Typ: LiteralNumber, Value: "2"},
+						Op2:       &LiteralExpr{Typ: LiteralNumber, Value: "3"},
 					},
 				},
 			},
@@ -229,11 +229,11 @@ func TestParser(t *testing.T) {
 			[]Expr{
 				&BinaryExpr{
 					Operation: BinaryAddition,
-					Op1:       &LiteralExpr{LiteralNumber, "1"},
+					Op1:       &LiteralExpr{Typ: LiteralNumber, Value: "1"},
 					Op2: &BinaryExpr{
 						Operation: BinaryMultiplication,
-						Op1:       &LiteralExpr{LiteralNumber, "3"},
-						Op2:       &LiteralExpr{LiteralNumber, "2"},
+						Op1:       &LiteralExpr{Typ: LiteralNumber, Value: "3"},
+						Op2:       &LiteralExpr{Typ: LiteralNumber, Value: "2"},
 					},
 				},
 			},
@@ -254,10 +254,10 @@ func TestParser(t *testing.T) {
 					Operation: BinaryMultiplication,
 					Op1: &BinaryExpr{
 						Operation: BinaryAddition,
-						Op1:       &LiteralExpr{LiteralNumber, "1"},
-						Op2:       &LiteralExpr{LiteralNumber, "3"},
+						Op1:       &LiteralExpr{Typ: LiteralNumber, Value: "1"},
+						Op2:       &LiteralExpr{Typ: LiteralNumber, Value: "3"},
 					},
-					Op2: &LiteralExpr{LiteralNumber, "2"},
+					Op2: &LiteralExpr{Typ: LiteralNumber, Value: "2"},
 				},
 			},
 		},
@@ -270,7 +270,7 @@ func TestParser(t *testing.T) {
 			[]Expr{
 				&UnaryExpr{
 					Operation: UnaryNegative,
-					Operand:   &LiteralExpr{LiteralNumber, "2"},
+					Operand:   &LiteralExpr{Typ: LiteralNumber, Value: "2"},
 				},
 			},
 		},
