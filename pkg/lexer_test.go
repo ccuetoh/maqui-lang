@@ -11,11 +11,13 @@ import (
 
 func TestLexer(t *testing.T) {
 	cases := []struct {
+		name   string
 		data   string
 		fail   bool
 		expect []Token
 	}{
 		{
+			"EmptyMain",
 			"func main () {}",
 			false,
 			[]Token{
@@ -28,6 +30,7 @@ func TestLexer(t *testing.T) {
 			},
 		},
 		{
+			"SingleLineComment",
 			"//this is a comment\n",
 			false,
 			[]Token{
@@ -35,6 +38,7 @@ func TestLexer(t *testing.T) {
 			},
 		},
 		{
+			"MainWithSingleLineComment",
 			"func main () {\n// this is a comment \n}",
 			false,
 			[]Token{
@@ -48,6 +52,7 @@ func TestLexer(t *testing.T) {
 			},
 		},
 		{
+			"UnicodeVarDeclaration",
 			"únicódeShouldBeVàlid := 1",
 			false,
 			[]Token{
@@ -57,6 +62,7 @@ func TestLexer(t *testing.T) {
 			},
 		},
 		{
+			"StringVarDeclaration",
 			"varDeclExpr := \"string\"",
 			false,
 			[]Token{
@@ -66,6 +72,7 @@ func TestLexer(t *testing.T) {
 			},
 		},
 		{
+			"EmptyString",
 			"\"\"",
 			false,
 			[]Token{
@@ -73,11 +80,13 @@ func TestLexer(t *testing.T) {
 			},
 		},
 		{
+			"UnclosedString",
 			"\"unclosed string",
 			true,
 			nil,
 		},
 		{
+			"BadCharacter",
 			"@",
 			true,
 			nil,
@@ -85,20 +94,21 @@ func TestLexer(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		r := strings.NewReader(c.data)
-		l := NewLexerFromReader(r)
+		t.Run(c.name, func(t *testing.T) {
+			r := strings.NewReader(c.data)
+			l := NewLexerFromReader(r)
 
-		toks, err := l.Run()
-		if c.fail {
-			assert.Error(t, err)
-		}
+			toks, err := l.Run()
+			if c.fail {
+				assert.Error(t, err)
+			}
 
-		for i := 0; i < len(toks); i++ {
-			toks[i].Loc = nil // ignore meta
-		}
+			for i := 0; i < len(toks); i++ {
+				toks[i].Loc = nil // ignore meta
+			}
 
-		assert.Equal(t, c.expect, toks)
-
+			assert.Equal(t, c.expect, toks)
+		})
 	}
 }
 

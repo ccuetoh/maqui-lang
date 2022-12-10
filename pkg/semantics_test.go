@@ -39,10 +39,12 @@ func (b *ParserMocker) GetFilename() string {
 
 func TestContextAnalyzer(t *testing.T) {
 	cases := []struct {
+		name   string
 		data   []Expr
 		expect *AST
 	}{
 		{
+			"VarSumInt",
 			[]Expr{
 				&FuncDecl{
 					Name: "main",
@@ -105,6 +107,7 @@ func TestContextAnalyzer(t *testing.T) {
 			},
 		},
 		{
+			"IncompatibleTypeIntString",
 			[]Expr{
 				&VariableDecl{
 					Name: "x",
@@ -166,6 +169,7 @@ func TestContextAnalyzer(t *testing.T) {
 			},
 		},
 		{
+			"FunctionDeclaration",
 			[]Expr{
 				&FuncDecl{
 					Name: "foo",
@@ -210,6 +214,7 @@ func TestContextAnalyzer(t *testing.T) {
 			},
 		},
 		{
+			"FunctionCallUndefined",
 			[]Expr{
 				&FuncCall{
 					Name: "foo",
@@ -242,6 +247,7 @@ func TestContextAnalyzer(t *testing.T) {
 			},
 		},
 		{
+			"IdentifierUndefined",
 			[]Expr{
 				&Identifier{
 					Name: "x",
@@ -272,6 +278,7 @@ func TestContextAnalyzer(t *testing.T) {
 			},
 		},
 		{
+			"UnaryNegativeImmediate",
 			[]Expr{
 				&UnaryExpr{
 					Operation: UnaryNegative,
@@ -299,6 +306,7 @@ func TestContextAnalyzer(t *testing.T) {
 			},
 		},
 		{
+			"UnaryNegativeString",
 			[]Expr{
 				&UnaryExpr{
 					Operation: UnaryNegative,
@@ -339,6 +347,7 @@ func TestContextAnalyzer(t *testing.T) {
 			},
 		},
 		{
+			"StringSubtraction",
 			[]Expr{
 				&BinaryExpr{
 					Operation: BinarySubtraction,
@@ -387,6 +396,7 @@ func TestContextAnalyzer(t *testing.T) {
 			},
 		},
 		{
+			"VarIntLiteralSum",
 			[]Expr{
 				&VariableDecl{
 					Name: "x",
@@ -474,6 +484,7 @@ func TestContextAnalyzer(t *testing.T) {
 			},
 		},
 		{
+			"VarDeclarationUndefinedOperand",
 			[]Expr{
 				&VariableDecl{
 					Name: "y",
@@ -532,26 +543,28 @@ func TestContextAnalyzer(t *testing.T) {
 		},
 	}
 
-	for n, c := range cases {
-		parser := NewParserMocker(c.data)
-		analyzer := NewContextAnalyser(parser)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			parser := NewParserMocker(c.data)
+			analyzer := NewContextAnalyser(parser)
 
-		c.expect.Filename = parser.GetFilename()
+			c.expect.Filename = parser.GetFilename()
 
-		global := NewGlobalSymbolTable()
-		analyzer.Define(global)
-		global.Errors = nil
+			global := NewGlobalSymbolTable()
+			analyzer.Define(global)
+			global.Errors = nil
 
-		// Bring global definitions into the expected global table
-		c.expect.Global.Merge(*NewGlobalSymbolTable())
-		for _, ae := range c.expect.Statements {
-			ae.Stab.Merge(*NewGlobalSymbolTable())
-		}
+			// Bring global definitions into the expected global table
+			c.expect.Global.Merge(*NewGlobalSymbolTable())
+			for _, ae := range c.expect.Statements {
+				ae.Stab.Merge(*NewGlobalSymbolTable())
+			}
 
-		got := analyzer.Do(global)
-		if !assert.Equal(t, c.expect, got) {
-			assert.Failf(t, "Unexpected", "Test %d returned unexpected value", n)
-		}
+			got := analyzer.Do(global)
+			if !assert.Equal(t, c.expect, got) {
+				assert.Fail(t, "Unexpected")
+			}
+		})
 	}
 }
 

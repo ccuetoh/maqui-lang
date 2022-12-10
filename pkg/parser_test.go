@@ -39,11 +39,13 @@ func (b *LexerMocker) GetFilename() string {
 
 func TestParser(t *testing.T) {
 	cases := []struct {
+		name   string
 		data   []Token
 		fail   bool
 		expect []Expr
 	}{
 		{
+			"FunctionDefinition",
 			[]Token{
 				{TokenFunc, "func", nil},
 				{TokenIdentifier, "main", nil},
@@ -61,6 +63,7 @@ func TestParser(t *testing.T) {
 			},
 		},
 		{
+			"Comment",
 			[]Token{
 				{TokenLineComment, "this is a comment", nil},
 			},
@@ -68,6 +71,7 @@ func TestParser(t *testing.T) {
 			nil,
 		},
 		{
+			"FunctionDefinitionWithComment",
 			[]Token{
 				{TokenFunc, "func", nil},
 				{TokenIdentifier, "main", nil},
@@ -86,6 +90,7 @@ func TestParser(t *testing.T) {
 			},
 		},
 		{
+			"UnicodeIdentifier",
 			[]Token{
 				{TokenIdentifier, "únicódeShouldBeVàlid", nil},
 				{TokenDeclaration, ":=", nil},
@@ -103,6 +108,7 @@ func TestParser(t *testing.T) {
 			},
 		},
 		{
+			"FunctionDefinitionMissingArgs",
 			[]Token{
 				{TokenFunc, "func", nil},
 				{TokenOpenCurly, "{", nil},
@@ -112,6 +118,7 @@ func TestParser(t *testing.T) {
 			nil,
 		},
 		{
+			"VarString",
 			[]Token{
 				{TokenIdentifier, "varDeclExpr", nil},
 				{TokenDeclaration, ":=", nil},
@@ -129,6 +136,7 @@ func TestParser(t *testing.T) {
 			},
 		},
 		{
+			"FunctionCall",
 			[]Token{
 				{TokenIdentifier, "foo", nil},
 				{TokenOpenParentheses, "(", nil},
@@ -143,6 +151,7 @@ func TestParser(t *testing.T) {
 			},
 		},
 		{
+			"FunctionCallWithArgs",
 			[]Token{
 				{TokenIdentifier, "foo", nil},
 				{TokenOpenParentheses, "(", nil},
@@ -163,6 +172,7 @@ func TestParser(t *testing.T) {
 			},
 		},
 		{
+			"FunctionCallWithExpression",
 			[]Token{
 				{TokenIdentifier, "foo", nil},
 				{TokenOpenParentheses, "(", nil},
@@ -186,6 +196,7 @@ func TestParser(t *testing.T) {
 			},
 		},
 		{
+			"FunctionCallInvalidExpression",
 			[]Token{
 				{TokenIdentifier, "foo", nil},
 				{TokenOpenParentheses, "(", nil},
@@ -197,6 +208,7 @@ func TestParser(t *testing.T) {
 			nil,
 		},
 		{
+			"ThreeWaySum",
 			[]Token{
 				{TokenNumber, "1", nil},
 				{TokenPlus, "+", nil},
@@ -218,6 +230,7 @@ func TestParser(t *testing.T) {
 			},
 		},
 		{
+			"MixedOperators",
 			[]Token{
 				{TokenNumber, "1", nil},
 				{TokenPlus, "+", nil},
@@ -239,6 +252,7 @@ func TestParser(t *testing.T) {
 			},
 		},
 		{
+			"ParenthesisedExpression",
 			[]Token{
 				{TokenOpenParentheses, "(", nil},
 				{TokenNumber, "1", nil},
@@ -262,6 +276,7 @@ func TestParser(t *testing.T) {
 			},
 		},
 		{
+			"UnaryNegative",
 			[]Token{
 				{TokenMinus, "-", nil},
 				{TokenNumber, "2", nil},
@@ -277,34 +292,36 @@ func TestParser(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		tokenizer := NewLexerMocker(c.data)
-		p := NewParser(tokenizer)
+		t.Run(c.name, func(t *testing.T) {
+			tokenizer := NewLexerMocker(c.data)
+			p := NewParser(tokenizer)
 
-		got := p.Run()
-		expect := &AST{Filename: p.GetFilename()}
+			got := p.Run()
+			expect := &AST{Filename: p.GetFilename()}
 
-		for _, e := range c.expect {
-			expect.Statements = append(expect.Statements, &AnnotatedExpr{
-				Expr: e,
-			})
-		}
+			for _, e := range c.expect {
+				expect.Statements = append(expect.Statements, &AnnotatedExpr{
+					Expr: e,
+				})
+			}
 
-		if c.fail {
-			failed := false
-			for _, expr := range got.Statements {
-				if _, ok := expr.Expr.(*BadExpr); ok {
-					failed = true
-					break
+			if c.fail {
+				failed := false
+				for _, expr := range got.Statements {
+					if _, ok := expr.Expr.(*BadExpr); ok {
+						failed = true
+						break
+					}
 				}
+
+				if !failed {
+					assert.Fail(t, "expected parsing to fail, but succeeded")
+				}
+
+				return
 			}
 
-			if !failed {
-				assert.Fail(t, "expected parsing to fail, but succeeded")
-			}
-
-			continue
-		}
-
-		assert.Equal(t, expect, got)
+			assert.Equal(t, expect, got)
+		})
 	}
 }
