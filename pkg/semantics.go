@@ -8,8 +8,12 @@ import (
 // SemanticAnalyser defines the expected behavior of a semantic analyzer. The semantic analyzer should use context-aware
 // strategies to build a symbol table and resolve reference in the code.
 type SemanticAnalyser interface {
-	Define(*SymbolTable)
-	Do() *AST
+	// DefineInto does a full but shallow pass over the expressions and brings the file definitions inside the provided scope.
+	// It won't delve into nested definitions like functions.
+	DefineInto(stab *SymbolTable)
+
+	// Do runs synchronously and returns the annotated AST produced
+	Do(global *SymbolTable) *AST
 }
 
 // ContextAnalyzer is the default Maqui semantic analyser. It goes over the expressions provided by the Parses to build
