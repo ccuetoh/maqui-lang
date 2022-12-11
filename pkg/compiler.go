@@ -16,7 +16,8 @@ func (c *Compiler) Compile(filename string) ([]CompileError, error) {
 	analyzer := NewContextAnalyser(parser)
 
 	global := NewGlobalSymbolTable()
-	analyzer.Define(global)
+	analyzer.DefineInto(global)
+
 	ast := analyzer.Do(global)
 
 	return ast.Errors, nil

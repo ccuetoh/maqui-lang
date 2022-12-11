@@ -5,21 +5,36 @@ import (
 	"strings"
 )
 
+// SemanticAnalyser defines the expected behavior of a semantic analyzer. The semantic analyzer should use context-aware
+// strategies to build a symbol table and resolve reference in the code.
 type SemanticAnalyser interface {
 	Define(*SymbolTable)
 	Do() *AST
 }
 
+// ContextAnalyzer is the default Maqui semantic analyser. It goes over the expressions provided by the Parses to build
+// an AST annotated with type data and symbol tables. A ContextAnalyzer is stateful and shouldn't be used for more than
+// one file.
 type ContextAnalyzer struct {
+	// filename name of the file that provided the source for the expressions
 	filename string
-	parser   SyntacticAnalyzer
+	// parser is the expression provider
+	parser SyntacticAnalyzer
 
-	cache   []Expr
-	live    bool
+	// cache hold expressions already visited to be able to go over them again when needed
+	cache []Expr
+	// live is true if the parser is providing expressions as the ContextAnalyzer goes forward. It starts as true
+	// and is set to false once the end of the end of the stream is reached. If live is set to false the ContextAnalyzer
+	// will feed from the cached expressions.
+	live bool
+	// started is set to true once the underlying parser is ran.
 	started bool
-	index   int
+	// index holds the current position of the ContextAnalyzer, but will only be used once live is set to false and the
+	// ContextAnalyzer is working offline.
+	index int
 }
 
+// NewContextAnalyser creates a *ContextAnalyzer that takes expressions from the parser.
 func NewContextAnalyser(parser SyntacticAnalyzer) *ContextAnalyzer {
 	return &ContextAnalyzer{
 		filename: parser.GetFilename(),
@@ -28,7 +43,9 @@ func NewContextAnalyser(parser SyntacticAnalyzer) *ContextAnalyzer {
 	}
 }
 
-func (c *ContextAnalyzer) Define(scope *SymbolTable) {
+// DefineInto does a full but shallow pass over the expressions and brings the file definitions inside the provided scope.
+// It won't delve into nested definitions like functions.
+func (c *ContextAnalyzer) DefineInto(scope *SymbolTable) {
 	c.reset()
 
 	for {
@@ -47,6 +64,8 @@ func (c *ContextAnalyzer) Define(scope *SymbolTable) {
 	}
 }
 
+// Do takes in a global symbol table and builds an annotated *AST. It delves into nested definitions and builds the
+// corresponding symbol tables as well.
 func (c *ContextAnalyzer) Do(global *SymbolTable) *AST {
 	c.reset()
 
@@ -67,6 +86,7 @@ func (c *ContextAnalyzer) Do(global *SymbolTable) *AST {
 			Expr: expr,
 		})
 
+		// Prevent duplicated entries caused by cascading errors
 		for _, err := range stab.Errors {
 			isDuplicate := false
 			for _, err2 := range ast.Errors {
@@ -85,6 +105,9 @@ func (c *ContextAnalyzer) Do(global *SymbolTable) *AST {
 	return ast
 }
 
+// get fetches the next available expression. If the ContextAnalyzer is running on live mode (that is, the first run) it
+// will fetch the expressions directly from the parser and store them in cache. Once the parser stream is exhausted the
+// ContextAnalyzer can be reset to use the cache in an offline way to go over the expressions again.
 func (c *ContextAnalyzer) get() Expr {
 	if c.live {
 		if !c.started {
@@ -112,10 +135,14 @@ func (c *ContextAnalyzer) get() Expr {
 	return expr
 }
 
+// reset sets the position (index) to the start
 func (c *ContextAnalyzer) reset() {
 	c.index = 0
 }
 
+// analyze takes in a symbol table and an expression and returns an updated symbol table with the new definition when
+// appropriate. If the expression is a nested expression it will recursively analyze the expressions therein. If one or
+// more invalid definitions are encountered they will be added to the SymbolTable's error slice.
 func (c *ContextAnalyzer) analyze(stab SymbolTable, expr Expr) SymbolTable {
 	switch e := expr.(type) {
 	case *BadExpr:
@@ -127,7 +154,7 @@ func (c *ContextAnalyzer) analyze(stab SymbolTable, expr Expr) SymbolTable {
 	case *FuncDecl:
 		c.addFunction(&stab, e)
 		for _, child := range e.Body {
-			stab.Merge(c.analyze(stab, child))
+			stab.Import(c.analyze(stab, child))
 		}
 
 		return stab
@@ -166,6 +193,9 @@ func (c *ContextAnalyzer) analyze(stab SymbolTable, expr Expr) SymbolTable {
 	return stab
 }
 
+// resolve will try to resolve the type of an expression. It takes in the context's symbol table and it might be used
+// to get other definition's types. If an error or an unexpected expression is encountered, an error will be added to
+// the symbol table and a *TypeErr will be returned.
 func (c *ContextAnalyzer) resolve(stab *SymbolTable, expr Expr) Type {
 	switch e := expr.(type) {
 	case *BadExpr:
@@ -247,6 +277,7 @@ func (c *ContextAnalyzer) resolve(stab *SymbolTable, expr Expr) Type {
 	return &TypeErr{"unknown"}
 }
 
+// addFunction is a shorthand to create a *FuncType entry inside the system table
 func (c *ContextAnalyzer) addFunction(stab *SymbolTable, e *FuncDecl) {
 	entry := &FuncType{}
 	// TODO Add arguments and returns
@@ -254,6 +285,8 @@ func (c *ContextAnalyzer) addFunction(stab *SymbolTable, e *FuncDecl) {
 	stab.Add(e.Name, entry)
 }
 
+// isOpDefined returns true if an operation is defined for the type. For example, subtraction is defined for numbers
+// (1-2), but not for strings ("foo"-"bar").
 func (c *ContextAnalyzer) isOpDefined(t Type, op BinaryOp) bool {
 	if _, isFunc := t.(*FuncType); isFunc {
 		return false
@@ -268,6 +301,7 @@ func (c *ContextAnalyzer) isOpDefined(t Type, op BinaryOp) bool {
 	return true
 }
 
+// isErrorType returns true if the provided type is a *TypeErr, and false otherwise
 func (c *ContextAnalyzer) isErrorType(t Type) bool {
 	if _, isErr := t.(*TypeErr); isErr {
 		return true
@@ -276,20 +310,28 @@ func (c *ContextAnalyzer) isErrorType(t Type) bool {
 	return false
 }
 
+// Type defines the behavior of type. It should at a minimum be stringable and comparable.
 type Type interface {
-	String() string
+	fmt.Stringer
 	Equals(t2 Type) bool
 }
 
+// TypeErr is special type that represents an error while resolving a type.
 type TypeErr struct {
+	// Reason contains an explanatory message of the error
 	Reason string
 }
 
 const (
-	TypeErrUndefined     = "undefined"
+	// TypeErrUndefined is used when an identifier was used but not defined
+	TypeErrUndefined = "undefined"
+	// TypeErrBadExpression occurs when a bad expression tries to get type-resolved
 	TypeErrBadExpression = "bad expr"
-	TypeErrIncompatible  = "incompatible"
-	TypeErrBadOp         = "bad op"
+	// TypeErrIncompatible occurs when a binary operations is attempted between two non-similar types
+	TypeErrIncompatible = "incompatible"
+	// TypeErrBadOp occurs when a binary operation is attempted between operands of same type that have an undefined
+	// operation. For example "foo"-"bar".
+	TypeErrBadOp = "bad op"
 )
 
 func (t *TypeErr) String() string {
@@ -298,6 +340,10 @@ func (t *TypeErr) String() string {
 
 func (t *TypeErr) Equals(_ Type) bool {
 	return false
+}
+
+func (t *TypeErr) Error() string {
+	return t.Reason
 }
 
 type AnyType struct{}
@@ -456,12 +502,18 @@ func (e UndefinedUnitaryError) String() string {
 	return fmt.Sprintf("%s undefined operation: '%s' has no operand '%s'", e.Loc, e.Type, e.Op)
 }
 
+// SymbolTable keeps a list of definitions and types inside a code context. It also hold all related errors generated
+// during its creation.
 type SymbolTable struct {
+	// Entries maps an identifier to its Type
 	Entries map[string]Type
-	Errors  []CompileError
+	// Errors hold all errors produced while creating the symbol table.
+	Errors []CompileError
 }
 
+// NewGlobalSymbolTable crates a new symbol table with global definitions prepopulated
 func NewGlobalSymbolTable() *SymbolTable {
+	// TODO: Move the creation of global definitions elsewhere
 	return &SymbolTable{
 		Entries: map[string]Type{
 			"print": &FuncType{
@@ -477,16 +529,19 @@ func NewGlobalSymbolTable() *SymbolTable {
 	}
 }
 
+// NewSymbolTable creates a new empty symbol table
 func NewSymbolTable() *SymbolTable {
 	return &SymbolTable{
 		Entries: make(map[string]Type),
 	}
 }
 
+// Add adds an entry to the symbol table. If an entry with the same name already exists, it will be replaced.
 func (t *SymbolTable) Add(name string, typ Type) {
 	t.Entries[name] = typ
 }
 
+// Get fetches the Type of the entry. If the entry is not present nil will be returned.
 func (t *SymbolTable) Get(name string) Type {
 	typ, contains := t.Entries[name]
 	if !contains {
@@ -496,7 +551,9 @@ func (t *SymbolTable) Get(name string) Type {
 	return typ
 }
 
-func (t *SymbolTable) Merge(t2 SymbolTable) {
+// Import merges the provided symbol table into the current table. It copies entries and errors. If an entry with the
+// same name already exists, it will be replaced. Priority is given to the incoming entry.
+func (t *SymbolTable) Import(t2 SymbolTable) {
 	for key, typ2 := range t2.Entries {
 		t.Entries[key] = typ2
 	}
@@ -506,6 +563,7 @@ func (t *SymbolTable) Merge(t2 SymbolTable) {
 	}
 }
 
+// Copy creates a new table and copies all entries and errors into it
 func (t *SymbolTable) Copy() *SymbolTable {
 	t2 := NewSymbolTable()
 
@@ -521,6 +579,7 @@ func (t *SymbolTable) Copy() *SymbolTable {
 	return t2
 }
 
+// AddError adds a new error to the table's error list
 func (t *SymbolTable) AddError(err CompileError) {
 	t.Errors = append(t.Errors, err)
 }

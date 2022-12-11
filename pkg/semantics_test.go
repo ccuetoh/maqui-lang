@@ -551,13 +551,13 @@ func TestContextAnalyzer(t *testing.T) {
 			c.expect.Filename = parser.GetFilename()
 
 			global := NewGlobalSymbolTable()
-			analyzer.Define(global)
+			analyzer.DefineInto(global)
 			global.Errors = nil
 
 			// Bring global definitions into the expected global table
-			c.expect.Global.Merge(*NewGlobalSymbolTable())
+			c.expect.Global.Import(*NewGlobalSymbolTable())
 			for _, ae := range c.expect.Statements {
-				ae.Stab.Merge(*NewGlobalSymbolTable())
+				ae.Stab.Import(*NewGlobalSymbolTable())
 			}
 
 			got := analyzer.Do(global)
