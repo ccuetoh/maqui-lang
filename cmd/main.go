@@ -7,7 +7,7 @@ import (
 
 func main() {
 	c := maqui.NewCompiler()
-	compileErr, err := c.Compile("./test/main.mq")
+	compileErr, err := c.Compile("./main.mq")
 	if err != nil {
 		panic(err)
 	}
