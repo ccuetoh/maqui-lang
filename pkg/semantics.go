@@ -54,7 +54,7 @@ func (c *ContextAnalyzer) DefineInto(scope *SymbolTable) {
 
 	for {
 		expr := c.get()
-		if expr == nil {
+		if !isValidExpr(expr) {
 			break
 		}
 
@@ -81,7 +81,15 @@ func (c *ContextAnalyzer) Do(global *SymbolTable) *AST {
 	for {
 		expr := c.get()
 		if expr == nil {
-			break
+			return ast
+		}
+
+		if bad, ok := expr.(*BadExpr); ok {
+			ast.Errors = append(ast.Errors, &BadExprError{
+				Loc:  expr.GetLocation(),
+				Expr: bad,
+			})
+			continue
 		}
 
 		stab := c.analyze(*ast.Global.Copy(), expr)
@@ -105,8 +113,6 @@ func (c *ContextAnalyzer) Do(global *SymbolTable) *AST {
 			}
 		}
 	}
-
-	return ast
 }
 
 // get fetches the next available expression. If the ContextAnalyzer is running on live mode (that is, the first run) it

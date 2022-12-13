@@ -213,6 +213,22 @@ func (e LiteralExpr) GetLocation() *Location {
 	return e.Location
 }
 
+// isValidExpr will return false if the expression is of type *BadExpr or *EOS
+func isValidExpr(expr Expr) bool {
+	if expr == nil {
+		return false
+	}
+
+	switch expr.(type) {
+	case *BadExpr:
+		return false
+	case *EOS:
+		return false
+	}
+
+	return true
+}
+
 // SyntacticAnalyzer defines the expected behavior of a code parser. The syntactic analyzer should be able to
 // evaluate the logic and construction of the source code, and is location-aware. Its main responsibility is to
 // organize the code into an ordered AST.
@@ -311,8 +327,8 @@ func (p *Parser) peek() Token {
 // token is fetched from the tokenizer.
 func (p *Parser) next() Token {
 	if p.buf != nil {
-		if !p.buf.isValid() {
-			// If an invalid token is buffered, don't try to get more tokens
+		if p.buf.Typ == TokenEOF {
+			// If the token is EOF don't clear the buffer
 			return *p.buf
 		}
 

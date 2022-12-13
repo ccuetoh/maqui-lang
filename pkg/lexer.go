@@ -222,12 +222,11 @@ func (l *Lexer) Run() ([]Token, error) {
 func startState(l *Lexer) lexerState {
 	for {
 		switch r := l.peek(); {
-		case r == EOF:
-			l.emmitNext(TokenEOF)
-			return nil
 		case unicode.IsSpace(r):
 			l.next()
 			continue
+		case r == EOF:
+			return endState
 		case '0' <= r && r <= '9':
 			return numberState
 		case r == '"':
@@ -326,6 +325,12 @@ func lineCommentState(l *Lexer) lexerState {
 	return l.emmitValue(TokenLineComment, id.String())
 }
 
+// endState emits an end-of-file token and finishes the execution by returning a nil state as a result.
+func endState(l *Lexer) lexerState {
+	l.emmitNext(TokenEOF)
+	return nil
+}
+
 // errorf is a shorthand for emitting a [TokenError] token with its value set to formatted string.
 func (l *Lexer) errorf(format string, args ...interface{}) lexerState {
 	l.output <- Token{
@@ -333,7 +338,7 @@ func (l *Lexer) errorf(format string, args ...interface{}) lexerState {
 		Value: fmt.Sprintf(format, args...),
 	}
 
-	return nil
+	return endState
 }
 
 // emmitNext is a shorthand for emitting a token of the t type, and setting its value to the next token in the stream.
@@ -399,6 +404,11 @@ func (m *Location) String() string {
 
 // isValid will return false if the token is of type [TokenEOF] or [TokenError], and true otherwise
 func (t Token) isValid() bool {
+	return t.Typ != TokenEOF && t.Typ != TokenError
+}
+
+// isEmpty returns true if the token is empty, and false otherwise
+func (t Token) isEmpty() bool {
 	return t.Typ != TokenEOF && t.Typ != TokenError
 }
 
