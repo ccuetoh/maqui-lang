@@ -50,7 +50,7 @@ type IR interface {
 
 type LLVMIRBuilder struct {
 	mod    *ir.Module
-	block  *ir.Block
+	fnc    *ir.Func
 	values *ValueLookup
 }
 
@@ -69,24 +69,53 @@ func (b *LLVMIRBuilder) function(expr *FuncDecl) {
 	f := b.mod.NewFunc(expr.Name, types.Void)
 	b.values.Set(expr.Name, f)
 
-	prevBlock := b.block
-	b.block = f.NewBlock("")
+	block := f.NewBlock("")
 
 	prevVals := b.values
 	b.values = NewValueLookup()
 	b.values.Inherit(prevVals)
 
 	defer func() {
-		b.block = prevBlock
 		b.values = prevVals
 	}()
 
 	for _, stmt := range expr.Body {
-		b.block.Insts = append(b.block.Insts, b.instructions(stmt)...)
+		if isBlockExpr(stmt) {
+			continueBlock := ir.NewBlock("")
+
+			blocks := b.blocks(stmt, continueBlock)
+			block.NewBr(blocks[0])
+
+			f.Blocks = append(f.Blocks, blocks...)
+			f.Blocks = append(f.Blocks, continueBlock)
+
+			block = continueBlock
+			continue
+		}
+
+		block.Insts = append(block.Insts, b.instructions(stmt)...)
 	}
 
 	// TODO: Allow returns
-	b.block.NewRet(nil)
+	block.NewRet(nil)
+}
+
+func isBlockExpr(expr Expr) bool {
+	switch expr.(type) {
+	case *IfExpr:
+		return true
+	default:
+		return false
+	}
+}
+
+func (b *LLVMIRBuilder) blocks(expr Expr, exit *ir.Block) []*ir.Block {
+	switch e := expr.(type) {
+	case *IfExpr:
+		return b.ifBranch(e, exit)
+	}
+
+	return nil
 }
 
 func (b *LLVMIRBuilder) instructions(expr Expr) []ir.Instruction {
@@ -103,6 +132,34 @@ func (b *LLVMIRBuilder) instructions(expr Expr) []ir.Instruction {
 	}
 
 	return []ir.Instruction{}
+}
+
+func (b *LLVMIRBuilder) ifBranch(expr *IfExpr, exit *ir.Block) []*ir.Block {
+	block := ir.NewBlock("")
+
+	condVal, _ := b.recursiveLoad(expr.Condition)
+
+	trueBlock := ir.NewBlock("")
+	for _, cExpr := range expr.Consequent {
+		trueBlock.Insts = append(trueBlock.Insts, b.instructions(cExpr)...)
+	}
+
+	trueBlock.NewBr(exit)
+
+	if len(expr.Else) == 0 {
+		block.NewCondBr(condVal, trueBlock, exit)
+		return []*ir.Block{block, trueBlock}
+	}
+
+	falseBlock := ir.NewBlock("")
+	for _, eExpr := range expr.Else {
+		falseBlock.Insts = append(falseBlock.Insts, b.instructions(eExpr)...)
+	}
+
+	falseBlock.NewBr(exit)
+
+	block.NewCondBr(condVal, trueBlock, falseBlock)
+	return []*ir.Block{block, trueBlock, falseBlock}
 }
 
 func (b *LLVMIRBuilder) recursiveLoad(expr Expr) (value.Value, []ir.Instruction) {

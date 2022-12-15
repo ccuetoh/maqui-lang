@@ -160,6 +160,7 @@ func (c *ContextAnalyzer) analyze(stab SymbolTable, expr Expr) SymbolTable {
 			Loc:  e.GetLocation(),
 			Expr: e,
 		})
+
 		return stab
 	case *FuncDecl:
 		c.addFunction(&stab, e)
@@ -186,6 +187,19 @@ func (c *ContextAnalyzer) analyze(stab SymbolTable, expr Expr) SymbolTable {
 			e.ResolvedTypes = append(e.ResolvedTypes, c.resolve(&stab, arg))
 			// TODO See if arguments match
 		}
+
+	case *IfExpr:
+		// TODO: Check if the condition is evaluable
+		_ = c.resolve(&stab, e.Condition)
+
+		for _, child := range e.Consequent {
+			stab.Import(c.analyze(stab, child))
+		}
+
+		for _, child := range e.Else {
+			stab.Import(c.analyze(stab, child))
+		}
+
 	case *Identifier:
 		if stab.Get(e.Name) == nil {
 			stab.AddError(&UndefinedError{

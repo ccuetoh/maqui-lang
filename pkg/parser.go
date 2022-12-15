@@ -55,7 +55,7 @@ type FuncDecl struct {
 	Location *Location
 	// Name is the name of the function
 	Name string
-	// Body contains all the statements inside the definition block
+	// Body contains all the statements inside the definition blocks
 	Body []Expr
 }
 
@@ -197,8 +197,8 @@ const (
 	LiteralString
 )
 
-// LiteralExpr contains an expression that's used as an immediate and thus has no space in dynamic memory. It contains
-// the type (LiteralType), location and value of the expression.
+// LiteralExpr contains an expression that's used as an immediate. It contains  the type (LiteralType), location and
+// value of the expression.
 type LiteralExpr struct {
 	// Location points to the source code that created the expression
 	Location *Location
@@ -210,6 +210,23 @@ type LiteralExpr struct {
 
 // GetLocation returns the location of the source code that generated the expression
 func (e LiteralExpr) GetLocation() *Location {
+	return e.Location
+}
+
+// IfExpr holds a logic branching expression.
+type IfExpr struct {
+	// Location points to the source code that created the expression
+	Location *Location
+	// Condition is the evaluation that decides if the consequent should be executed
+	Condition Expr
+	// Consequent is the expressions that should run if the condition is truthful
+	Consequent []Expr
+	// Else is an optional slice of expressions that run if the condition is false
+	Else []Expr
+}
+
+// GetLocation returns the location of the source code that generated the expression
+func (e IfExpr) GetLocation() *Location {
 	return e.Location
 }
 
@@ -264,7 +281,7 @@ func NewParser(tokenizer Tokenizer) *Parser {
 	}
 }
 
-// Get fetches one expression from the output buffer. Will block if no token is available. After receiving an [EOS]
+// Get fetches one expression from the output buffer. Will blocks if no token is available. After receiving an [EOS]
 // expression no more expressions should be fetched.
 func (p *Parser) Get() Expr {
 	return <-p.Chan()
@@ -392,6 +409,8 @@ func (p *Parser) statement() Expr {
 	switch tok := p.peek(); tok.Typ {
 	case TokenFunc:
 		return p.funcDecl()
+	case TokenIf:
+		return p.ifBranch()
 	default:
 		return p.expr()
 	}
@@ -418,11 +437,38 @@ func (p *Parser) funcDecl() Expr {
 	}
 }
 
+// ifBranch builds an *IfExpr from the stream. If it fails a *BadExpr will be returned.
+func (p *Parser) ifBranch() Expr {
+	ifKw := p.expect(TokenIf)
+	if ifKw == nil {
+		return p.errorf(nil, "expected an if statement")
+	}
+
+	expr := &IfExpr{
+		Location:  ifKw.Loc,
+		Condition: p.expr(),
+	}
+
+	if !p.check(TokenOpenCurly) {
+		return p.errorf(expr.Location, "expected a code blocks after if statement")
+	}
+
+	expr.Consequent = p.blockStmt()
+
+	if !p.check(TokenElse) {
+		return expr
+	}
+
+	p.next() // Skip else
+	expr.Else = p.blockStmt()
+	return expr
+}
+
 // blockStmt parses a list of statements. If it fails a *BadExpr will be placed inside the returned slice, but it might
 // have valid Expr inside.
 func (p *Parser) blockStmt() []Expr {
 	if tok := p.expect(TokenOpenCurly); tok == nil {
-		return []Expr{p.errorf(nil, "invalid block statement")}
+		return []Expr{p.errorf(nil, "invalid blocks statement")}
 	}
 
 	var exprs []Expr
@@ -434,11 +480,11 @@ func (p *Parser) blockStmt() []Expr {
 	case TokenCloseCurly:
 		return exprs
 	case TokenError:
-		return append(exprs, p.errorf(closer.Loc, "invalid block statement"))
+		return append(exprs, p.errorf(closer.Loc, "invalid blocks statement"))
 	case TokenEOF:
-		return append(exprs, p.errorf(closer.Loc, "unclosed block statement"))
+		return append(exprs, p.errorf(closer.Loc, "unclosed blocks statement"))
 	default:
-		return append(exprs, p.errorf(closer.Loc, "unexpected token in block statement"))
+		return append(exprs, p.errorf(closer.Loc, "unexpected token in blocks statement"))
 	}
 }
 

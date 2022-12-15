@@ -69,12 +69,19 @@ const (
 
 	// TokenComma denotes the comma symbol (',').
 	TokenComma
+
+	// TokenIf denotes the 'if' keyword.
+	TokenIf
+	// TokenElse denotes the 'else' keyword.
+	TokenElse
 )
 
 // keywordTable holds all the defined keywords and their respective token. It's used to lookup if an identifier
 // corresponds to a keyword.
 var keywordTable = map[string]TokenType{
 	"func": TokenFunc,
+	"if":   TokenIf,
+	"else": TokenElse,
 }
 
 // operatorTable holds a map between operator symbols and their token. It's used to check if a given string corresponds

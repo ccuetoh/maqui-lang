@@ -1,6 +1,8 @@
 func main() {
-    x := 1+y // comment
-    print(x)
-}
+    x := 1 * 2
+    if x {
+        print(1)
+    }
 
-y := 3
+    print(3)
+}

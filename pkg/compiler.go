@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
+	"os"
 	"os/exec"
 
 	"golang.org/x/sync/errgroup"
@@ -67,6 +69,9 @@ func (c *Compiler) Compile(filename string) ([]CompileError, error) {
 }
 
 func (c *Compiler) build(ir IR) error {
+	// TODO: DEVELOPMENT ONLY
+	saveIR(ir)
+
 	outName := "main"
 	if c.target.OS == Windows {
 		outName += ".exe"
@@ -102,4 +107,12 @@ func (c *Compiler) build(ir IR) error {
 	})
 
 	return errs.Wait()
+}
+
+// TODO: DEVELOPMENT ONLY
+func saveIR(ir IR) {
+	err := os.WriteFile("main.ll", []byte(ir.String()), fs.ModePerm)
+	if err != nil {
+		panic(err.Error())
+	}
 }
