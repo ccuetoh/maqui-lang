@@ -82,6 +82,8 @@ var keywordTable = map[string]TokenType{
 var operatorTable = map[string]TokenType{
 	"+":  TokenPlus,
 	"-":  TokenMinus,
+	"*":  TokenMulti,
+	"/":  TokenDiv,
 	":=": TokenDeclaration,
 	"//": TokenLineComment,
 	"(":  TokenOpenParentheses,
