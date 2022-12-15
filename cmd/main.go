@@ -3,13 +3,26 @@ package main
 import (
 	"fmt"
 	"go.maqui.dev/pkg"
+	"os"
 )
 
 func main() {
-	c := maqui.NewCompiler()
-	compileErr, err := c.Compile("./main.mq")
+	if len(os.Args) != 2 {
+		fmt.Println("Expected one argument: source location")
+		return
+	}
+
+	source := os.Args[1]
+
+	c := maqui.NewCompiler(maqui.Target{
+		Arch:   maqui.X86_64,
+		Vendor: maqui.Unknown,
+		OS:     maqui.Linux,
+	})
+
+	compileErr, err := c.Compile(source)
 	if err != nil {
-		panic(err)
+		panic(err.Error())
 	}
 
 	if len(compileErr) != 0 {

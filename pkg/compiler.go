@@ -1,17 +1,46 @@
 package maqui
 
 import (
-	"io/fs"
-	"log"
-	"os"
+	"errors"
+	"fmt"
+	"io"
 	"os/exec"
-	"runtime"
+
+	"golang.org/x/sync/errgroup"
 )
 
-type Compiler struct{}
+type Arch string
+type Vendor string
+type OS string
 
-func NewCompiler() *Compiler {
-	return &Compiler{}
+const (
+	X86_64 Arch = "x86_64"
+
+	Unknown Vendor = "unknown"
+
+	Windows OS = "windows64"
+	Linux   OS = "linux"
+	Darwin  OS = "darwin"
+)
+
+type Target struct {
+	Arch   Arch
+	Vendor Vendor
+	OS     OS
+}
+
+func (t Target) String() string {
+	return fmt.Sprintf("%s-%s-%s", t.Arch, t.Vendor, t.OS)
+}
+
+type Compiler struct {
+	target Target
+}
+
+func NewCompiler(target Target) *Compiler {
+	return &Compiler{
+		target: target,
+	}
 }
 
 func (c *Compiler) Compile(filename string) ([]CompileError, error) {
@@ -34,25 +63,43 @@ func (c *Compiler) Compile(filename string) ([]CompileError, error) {
 	gen := NewLLVMGenerator(ast)
 	ir := gen.Do()
 
-	err = os.Mkdir("./build", os.ModePerm)
-	if err != nil {
-		log.Println(err)
+	return nil, c.build(ir)
+}
+
+func (c *Compiler) build(ir IR) error {
+	outName := "main"
+	if c.target.OS == Windows {
+		outName += ".exe"
 	}
 
-	err = os.WriteFile("./build/temp.ll", []byte(ir.String()), fs.ModePerm)
-	if err != nil {
-		return nil, err
-	}
+	cmd := exec.Command("clang",
+		"-x",
+		"ir",
+		"--target="+c.target.String(),
+		"-o", outName,
+		"-",
+	)
 
-	out := "./build/main"
-	if runtime.GOOS == "Windows" {
-		out += ".exe"
-	}
+	r, w := io.Pipe()
+	cmd.Stdin = r
 
-	cmd := exec.Command("clang", "./build/temp.ll", "-o", out)
-	if err = cmd.Run(); err != nil {
-		return nil, err
-	}
+	errs := errgroup.Group{}
+	errs.Go(func() error {
+		_, err := w.Write([]byte(ir.String()))
+		if err != nil {
+			return err
+		}
 
-	return nil, nil
+		return w.Close()
+	})
+
+	errs.Go(func() error {
+		if cmdOut, err := cmd.CombinedOutput(); err != nil {
+			return errors.New(fmt.Sprintf("%v: %s", err, cmdOut))
+		}
+
+		return nil
+	})
+
+	return errs.Wait()
 }
