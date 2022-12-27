@@ -74,6 +74,9 @@ const (
 	TokenIf
 	// TokenElse denotes the 'else' keyword.
 	TokenElse
+
+	// TokenBooleanEquals denotes the '==' symbol, a boolean equality comparator.
+	TokenBooleanEquals
 )
 
 // keywordTable holds all the defined keywords and their respective token. It's used to lookup if an identifier
@@ -98,6 +101,7 @@ var operatorTable = map[string]TokenType{
 	"{":  TokenOpenCurly,
 	"}":  TokenCloseCurly,
 	",":  TokenComma,
+	"==": TokenBooleanEquals,
 }
 
 // Token contains a lexicographical token parsed from the input stream. A Token contains its type, an optional semantic
@@ -301,7 +305,7 @@ func identifierState(l *Lexer) lexerState {
 // [operatorTable]), the corresponding token type is emitted, otherwise an error will be emitted.
 func operatorState(l *Lexer) lexerState {
 	r := l.next()
-	if r == ':' || r == '/' { // Some operators can be two runes
+	if r == ':' || r == '/' || r == '=' { // Some operators can be two runes
 		op := string(r) + string(l.peek())
 		if tok, ok := operatorTable[string(r)+string(l.peek())]; ok {
 			l.next() // Skip

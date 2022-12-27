@@ -143,6 +143,15 @@ const (
 	BinaryDivision BinaryOp = "/"
 )
 
+// BooleanOp defines a binary operation type with a resulting boolean, like comparator operators. Valid types are
+// equals (==) (TODO)
+type BooleanOp string
+
+const (
+	// BooleanEquals is the equals assertion (==) between two expressions
+	BooleanEquals BooleanOp = "=="
+)
+
 // BinaryExpr is an expression that defines an operation between two expressions. The operator is a [BinaryOp], that
 // holds what operation is taking place. It contains the location pointing to where the expression is inside the source,
 // and the operands (also expressions).
@@ -159,6 +168,25 @@ type BinaryExpr struct {
 
 // GetLocation returns the location of the source code that generated the expression
 func (e BinaryExpr) GetLocation() *Location {
+	return e.Location
+}
+
+// BooleanExpr is an expression that defines an operation between two expressions resulting in a boolean result. The
+// operator is a [BooleanOp], that holds what operation is taking place. It contains the location pointing to where the
+// expression is inside the source, and the operands (also expressions).
+type BooleanExpr struct {
+	// Location points to the source code that created the expression
+	Location *Location
+	// Operation is the binary operation being performed
+	Operation BooleanOp
+	// Op1 is the first operand
+	Op1 Expr
+	// Op2 is the second operand
+	Op2 Expr
+}
+
+// GetLocation returns the location of the source code that generated the expression
+func (e BooleanExpr) GetLocation() *Location {
 	return e.Location
 }
 
@@ -578,7 +606,7 @@ func (p *Parser) additiveExpr() Expr {
 
 // multiplicativeExpr will parse a multiplicative expression if found, or decent otherwise
 func (p *Parser) multiplicativeExpr() Expr {
-	lhs := p.unaryExpr()
+	lhs := p.booleanExpr()
 
 	for true {
 		if tok := p.peek(); tok.Typ == TokenMulti || tok.Typ == TokenDiv {
@@ -589,6 +617,32 @@ func (p *Parser) multiplicativeExpr() Expr {
 			lhs = &BinaryExpr{
 				Location:  lhs.GetLocation(),
 				Operation: BinaryOp(tok.Value),
+				Op1:       lhs,
+				Op2:       rhs,
+			}
+
+			continue
+		}
+
+		return lhs
+	}
+
+	return lhs // Unreachable
+}
+
+// booleanExpr will parse a boolean expression if found, or decent otherwise
+func (p *Parser) booleanExpr() Expr {
+	lhs := p.unaryExpr()
+
+	for true {
+		if tok := p.peek(); tok.Typ == TokenBooleanEquals {
+			// Chained operands (for example 1 == 3 == 1). Go over the operand and nest
+			p.next()
+
+			rhs := p.booleanExpr()
+			lhs = &BooleanExpr{
+				Location:  lhs.GetLocation(),
+				Operation: BooleanOp(tok.Value),
 				Op1:       lhs,
 				Op2:       rhs,
 			}

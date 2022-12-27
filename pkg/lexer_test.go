@@ -148,6 +148,16 @@ func TestLexer(t *testing.T) {
 				{TokenCloseCurly, "}", nil},
 			},
 		},
+		{
+			"SimpleEquals",
+			"1 == 1",
+			false,
+			[]Token{
+				{TokenNumber, "1", nil},
+				{TokenBooleanEquals, "==", nil},
+				{TokenNumber, "1", nil},
+			},
+		},
 	}
 
 	for _, c := range cases {

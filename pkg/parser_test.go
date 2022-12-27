@@ -478,6 +478,22 @@ func TestParser(t *testing.T) {
 				},
 			},
 		},
+		{
+			"SimpleEquals",
+			[]Token{
+				{TokenNumber, "1", nil},
+				{TokenBooleanEquals, "==", nil},
+				{TokenNumber, "1", nil},
+			},
+			false,
+			[]Expr{
+				&BooleanExpr{
+					Operation: BooleanEquals,
+					Op1:       &LiteralExpr{Typ: LiteralNumber, Value: "1"},
+					Op2:       &LiteralExpr{Typ: LiteralNumber, Value: "1"},
+				},
+			},
+		},
 	}
 
 	for _, c := range cases {

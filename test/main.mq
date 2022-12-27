@@ -1,6 +1,6 @@
 func main() {
     x := 1 * 2
-    if x {
+    if x == 3 {
         print(1)
     }
 

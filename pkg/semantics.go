@@ -190,6 +190,7 @@ func (c *ContextAnalyzer) analyze(stab SymbolTable, expr Expr) SymbolTable {
 
 	case *IfExpr:
 		// TODO: Check if the condition is evaluable
+		// TODO: Add test cases
 		_ = c.resolve(&stab, e.Condition)
 
 		for _, child := range e.Consequent {

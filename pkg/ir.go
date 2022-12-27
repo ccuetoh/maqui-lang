@@ -2,11 +2,13 @@ package maqui
 
 import (
 	"fmt"
+	"github.com/llir/llvm/ir/enum"
+	"strconv"
+
 	"github.com/llir/llvm/ir"
 	"github.com/llir/llvm/ir/constant"
 	"github.com/llir/llvm/ir/types"
 	"github.com/llir/llvm/ir/value"
-	"strconv"
 )
 
 type ValueLookup struct {
@@ -50,7 +52,6 @@ type IR interface {
 
 type LLVMIRBuilder struct {
 	mod    *ir.Module
-	fnc    *ir.Func
 	values *ValueLookup
 }
 
@@ -137,7 +138,8 @@ func (b *LLVMIRBuilder) instructions(expr Expr) []ir.Instruction {
 func (b *LLVMIRBuilder) ifBranch(expr *IfExpr, exit *ir.Block) []*ir.Block {
 	block := ir.NewBlock("")
 
-	condVal, _ := b.recursiveLoad(expr.Condition)
+	condVal, condIns := b.recursiveLoad(expr.Condition)
+	block.Insts = append(block.Insts, condIns...)
 
 	trueBlock := ir.NewBlock("")
 	for _, cExpr := range expr.Consequent {
@@ -168,6 +170,8 @@ func (b *LLVMIRBuilder) recursiveLoad(expr Expr) (value.Value, []ir.Instruction)
 		return b.loadLiteral(e)
 	case *BinaryExpr:
 		return b.binaryExpression(e)
+	case *BooleanExpr:
+		return b.booleanExpression(e)
 	case *UnaryExpr:
 		return b.unaryExpression(e)
 	case *Identifier:
@@ -198,6 +202,22 @@ func (b *LLVMIRBuilder) binaryExpression(expr *BinaryExpr) (value.Value, []ir.In
 	case BinaryDivision:
 		// TODO: Use fdiv and udiv when appropriate
 		op := ir.NewSDiv(v1, v2)
+		return op, append(ins, op)
+	default:
+		// TODO: Handle gracefully
+		panic("unexpected binary op: " + expr.Operation)
+	}
+}
+
+func (b *LLVMIRBuilder) booleanExpression(expr *BooleanExpr) (value.Value, []ir.Instruction) {
+	v1, i1 := b.recursiveLoad(expr.Op1)
+	v2, i2 := b.recursiveLoad(expr.Op2)
+	ins := append(i1, i2...)
+
+	switch expr.Operation {
+	case BooleanEquals:
+		// TODO Add more data types
+		op := ir.NewICmp(enum.IPredEQ, v1, v2)
 		return op, append(ins, op)
 	default:
 		// TODO: Handle gracefully
