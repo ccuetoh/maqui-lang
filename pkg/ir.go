@@ -11,24 +11,20 @@ import (
 	"github.com/llir/llvm/ir/value"
 )
 
-type ValueLookup struct {
-	vals map[string]value.Value
+type ValueLookup map[string]value.Value
+
+func NewValueLookup() ValueLookup {
+	return make(map[string]value.Value)
 }
 
-func NewValueLookup() *ValueLookup {
-	return &ValueLookup{
-		vals: make(map[string]value.Value),
-	}
-}
-
-func (l *ValueLookup) Inherit(t2 *ValueLookup) {
-	for k, v := range t2.vals {
+func (l ValueLookup) Inherit(t2 ValueLookup) {
+	for k, v := range t2 {
 		l.Set(k, v)
 	}
 }
 
-func (l *ValueLookup) Get(id string) value.Value {
-	if val, ok := l.vals[id]; ok {
+func (l ValueLookup) Get(id string) value.Value {
+	if val, ok := l[id]; ok {
 		return val
 	}
 
@@ -37,8 +33,8 @@ func (l *ValueLookup) Get(id string) value.Value {
 	panic("undefined identifier: " + id)
 }
 
-func (l *ValueLookup) Set(id string, val value.Value) {
-	l.vals[id] = val
+func (l ValueLookup) Set(id string, val value.Value) {
+	l[id] = val
 }
 
 type IRGenerator interface {
@@ -52,7 +48,7 @@ type IR interface {
 
 type LLVMIRBuilder struct {
 	mod    *ir.Module
-	values *ValueLookup
+	values ValueLookup
 }
 
 func NewLLVMIRBuilder() *LLVMIRBuilder {
